@@ -15,15 +15,31 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
   const [warnings, setWarnings] = useState({});
   const startTime = useRef(propStartTime || Date.now());
   
-  const { events, quizAreaRef, recordEvent } = useBehaviorTracking();
+  // Add recordHover here! ⬇️
+  const { events, quizAreaRef, recordEvent, recordHover } = useBehaviorTracking();
 
   const handleAnswerChange = (question, value) => {
-    recordEvent('C', { action: 'answer_selected', question, value });
+    // Get mouse position for click tracking
+    const mouseEvent = window.event;
+    const metadata = { action: 'answer_selected', question, value };
+    
+    if (mouseEvent && quizAreaRef.current) {
+      const rect = quizAreaRef.current.getBoundingClientRect();
+      metadata.x = mouseEvent.clientX - rect.left;
+      metadata.y = mouseEvent.clientY - rect.top;
+    }
+    
+    recordEvent('C', metadata);
     setAnswers(prev => ({ ...prev, [question]: value }));
     setWarnings(prev => ({ ...prev, [question]: false }));
   };
 
   const handleClear = () => {
+    // FIX #5: Record clear action
+    recordEvent('CLEAR', { 
+      previousAnswerCount: Object.keys(answers).length 
+    });
+    
     setAnswers({});
     setWarnings({});
   };
@@ -51,7 +67,7 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
     });
 
     const analysis = analyzeQuizBehavior(score, events, questions, startTime.current);
-    if (onComplete) onComplete(analysis);
+    if (onComplete) onComplete(analysis, events); // Pass both analysis and events
   };
 
   return (
@@ -70,6 +86,7 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
             selectedAnswer={answers[q.id]}
             warning={warnings[q.id]}
             onAnswerChange={handleAnswerChange}
+            onHover={recordHover}
           />
         ))}
 

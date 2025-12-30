@@ -3,12 +3,17 @@ import React from 'react';
 import { Activity } from 'lucide-react';
 
 export const BehaviorInfo = ({ events }) => {
+  const clicks = events.filter(e => e.type === 'C').length;
+  const moves = events.filter(e => e.type === 'M').length;
+  const hovers = events.filter(e => e.type === 'H').length;
+  const scrolls = events.filter(e => e.type === 'S').length;
+  const tabSwitches = events.filter(e => e.type === 'T' || e.type === 'R').length;
+
   return (
     <div style={styles.infoBox}>
       <Activity size={16} style={{ color: '#4F46E5', marginTop: '2px', flexShrink: 0 }} />
       <p style={styles.infoText}>
-        Your behavior is being analyzed: click timing ({events.filter(e => e.type === 'C').length} clicks),
-        mouse movements ({events.filter(e => e.type === 'M').length} moves), and interaction patterns.
+        Your behavior is being analyzed: {clicks} clicks, {moves} mouse movements,  {hovers}  hovers, {scrolls} scrolls, and {tabSwitches} tab switches.
       </p>
     </div>
   );

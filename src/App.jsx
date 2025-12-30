@@ -7,25 +7,29 @@ function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing', 'quiz', 'results'
   const [quizResults, setQuizResults] = useState(null);
   const [quizStartTime, setQuizStartTime] = useState(null);
+  const [savedEvents, setSavedEvents] = useState([]); // ← Add this to save events
 
   const handleStartQuiz = () => {
     setCurrentPage('quiz');
     setQuizStartTime(Date.now());
   };
 
-  const handleQuizComplete = (analysis) => {
+  const handleQuizComplete = (analysis, events) => { // ← Accept events parameter
     setQuizResults(analysis);
+    setSavedEvents(events); // ← Save the events
     setCurrentPage('results');
   };
 
   const handleQuizAgain = () => {
     setQuizResults(null);
+    setSavedEvents([]); // ← Clear events
     setQuizStartTime(Date.now());
     setCurrentPage('quiz');
   };
 
   const handleGoHome = () => {
     setQuizResults(null);
+    setSavedEvents([]); // ← Clear events
     setQuizStartTime(null);
     setCurrentPage('landing');
   };
@@ -49,6 +53,7 @@ function App() {
           startTime={quizStartTime}
           onQuizAgain={handleQuizAgain}
           onGoHome={handleGoHome}
+          events={savedEvents} // ← Pass the saved events
         />
       )}
     </div>

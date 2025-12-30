@@ -15,6 +15,9 @@ export const useBehaviorTracking = () => {
 
   useEffect(() => {
     let lastMoveTime = 0;
+    let lastScrollTime = 0;
+
+    // Mouse movement tracking
     const handleMouseMove = (e) => {
       const now = Date.now();
       if (now - lastMoveTime > 100) {
@@ -27,9 +30,51 @@ export const useBehaviorTracking = () => {
         }
       }
     };
+
+    // Scroll tracking - NO coordinates at all, only scroll position
+    const handleScroll = () => {
+      const now = Date.now();
+      if (now - lastScrollTime > 200) {
+        // Only record scrollY, no x or y coordinates
+        recordEvent('S', { scrollY: window.scrollY });
+        lastScrollTime = now;
+      }
+    };
+
+    // Tab switching tracking
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        recordEvent('T'); // Tab switched away
+      } else {
+        recordEvent('R'); // Tab returned
+      }
+    };
+
+    // Register all event listeners
     document.addEventListener('mousemove', handleMouseMove);
-    return () => document.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('scroll', handleScroll);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
-  return { events, quizAreaRef, recordEvent };
+  // Hover tracking helper (to be called from components)
+  const recordHover = (elementName, event) => {
+    const metadata = { element: elementName };
+    
+    if (event && quizAreaRef.current) {
+      const rect = quizAreaRef.current.getBoundingClientRect();
+      metadata.x = event.clientX - rect.left;
+      metadata.y = event.clientY - rect.top;
+    }
+    
+    recordEvent('H', metadata);
+  };
+
+  return { events, quizAreaRef, recordEvent, recordHover };
 };

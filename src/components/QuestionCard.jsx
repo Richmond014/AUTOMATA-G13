@@ -1,9 +1,13 @@
 // src/components/quiz/QuestionCard.jsx
 import React from 'react';
 
-export const QuestionCard = ({ question, index, selectedAnswer, warning, onAnswerChange }) => {
+export const QuestionCard = ({ question, index, selectedAnswer, warning, onAnswerChange, onHover }) => {
   return (
-    <div id={`question-${index}`} style={styles.questionCard}>
+    <div 
+      id={`question-${index}`} 
+      style={styles.questionCard}
+      onMouseEnter={(e) => onHover && onHover('question-card', e)}  // ✅ Pass event
+    >
       <h3 style={styles.questionTitle}>
         {index + 1}. {question.question}
       </h3>
@@ -21,6 +25,7 @@ export const QuestionCard = ({ question, index, selectedAnswer, warning, onAnswe
                 ...(isSelected ? styles.optionLabelSelected : {})
               }}
               onMouseEnter={(e) => {
+                onHover && onHover('option', e);  // ✅ Pass event
                 if (!isSelected) {
                   e.currentTarget.style.transform = 'translateX(4px)';
                 }
