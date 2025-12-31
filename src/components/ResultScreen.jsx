@@ -649,6 +649,76 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
               </div>
             </div>
 
+            {/* Windowed Analysis Section */}
+            {safeAnalysis.windows && safeAnalysis.windows.length > 0 && (
+              <div style={styles.statsCard}>
+                <h3 style={styles.cardHeader}>
+                  <Activity size={24} style={{ color: '#4F46E5' }} />
+                  <span>Window Analysis (5-Second Intervals)</span>
+                </h3>
+                <div style={{ marginBottom: '1.5rem', color: '#6B7280', fontSize: '0.875rem' }}>
+                  Analyzed {safeAnalysis.windowStats.totalWindows} windows. 
+                  DFA State: <strong style={{ color: borderColor }}>{safeAnalysis.dfaState}</strong>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '3px solid rgb(96, 165, 250)' }}>
+                     <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Window</th>
+<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Events</th>
+<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>T</th>
+<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>R</th>
+<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>E</th>
+<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>C</th>
+<th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {safeAnalysis.windows.map((w, idx) => {
+                        const flagCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 's').length;
+                        const cautionCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 'c').length;
+                        let rowColor = '#22c55e';
+                        if (flagCount >= 3) rowColor = '#ef4444';
+                        else if (flagCount >= 2 || cautionCount >= 2) rowColor = '#fb923c';
+                        else if (flagCount >= 1 || cautionCount >= 1) rowColor = '#fbbf24';
+                        
+                        const getFlagEmoji = (flag) => {
+                          if (flag === 's') return '🚨';
+                          if (flag === 'c') return '⚠️';
+                          if (flag === 'h') return '✅';
+                          return '—';
+                        };
+                        
+                        return (
+                          <tr key={idx} style={{ borderBottom: '#3px solid rgb(96, 165, 250)' }}>
+                            <td style={{ padding: '0.75rem', color: 'black'}}>{w.window.start}s - {w.window.end}s</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{w.eventCount}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.T)}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.R)}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.E)}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center' , color: 'black'}}>{getFlagEmoji(w.analysis.C)}</td>
+                            <td style={{ padding: '0.75rem' }}>
+                              <span style={{ color: rowColor, fontWeight: '600', fontSize: '1.2rem' }}>
+                                {flagCount >= 3 ? '🚨 Bot' : flagCount >= 2 ? '⚠️ Review' : flagCount >= 1 ? '⚠️ Caution' : '✅ Normal'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#97bce3ff', borderRadius: '0.5rem' }}>
+                  <strong>Window Statistics:</strong>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                    <div>🚨 Suspicious: {safeAnalysis.windowStats.suspiciousRatio}%</div>
+                    <div>⚠️ Caution: {safeAnalysis.windowStats.cautionRatio}%</div>
+                    <div>✅ Human: {safeAnalysis.windowStats.humanRatio}%</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Turing Machine Tape Simulation */}
             <div style={styles.tapeCard}>
               <div style={styles.tapeHeader}>
@@ -735,7 +805,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                             {event.type === 'S' ? (
                               event.scrollY !== undefined && (
                                 <div style={styles.coordinates}>
-                                
+                                  Scroll: {Math.round(event.scrollY)}px
                                 </div>
                               )
                             ) : (
