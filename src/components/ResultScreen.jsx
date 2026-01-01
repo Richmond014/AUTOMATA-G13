@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, 
 function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome, events = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [writtenWindowMax, setWrittenWindowMax] = useState(-1);
   const tapeRef = useRef(null);
 
   // Scroll to top when results page loads
@@ -39,6 +40,26 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
   const blocks = groupEvents(events);
 
+  const getWindowIndexForEvent = (event) => {
+    if (!event || !events || events.length === 0) return 0;
+    const t0 = events[0]?.timestamp ?? 0;
+    const dt = Math.max(0, (event.timestamp ?? t0) - t0);
+    return Math.floor(dt / 5000);
+  };
+
+  const currentWindowIndex = events && events.length > 0
+    ? getWindowIndexForEvent(events[currentIndex] || events[0])
+    : 0;
+
+  const buildWindowToken = (windowAnalysis) => {
+    const analysisObj = windowAnalysis?.analysis || windowAnalysis || {};
+    const flagToToken = (metric, flag) => {
+      const suffix = flag === 's' ? 's' : flag === 'c' ? 'c' : flag === 'h' ? 'h' : 'n';
+      return `${metric}_${suffix}`;
+    };
+    return ['T', 'R', 'E', 'C'].map((m) => flagToToken(m, analysisObj[m])).join(' | ');
+  };
+
   // Auto-play animation with adjusted speed (500ms per event)
   useEffect(() => {
     if (!isPlaying || currentIndex >= events.length - 1) {
@@ -52,6 +73,13 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
     return () => clearTimeout(timer);
   }, [isPlaying, currentIndex, events.length]);
+
+  // Write to the output tape as the input head advances (per 5-second window)
+  useEffect(() => {
+    if (!events || events.length === 0) return;
+    const wi = getWindowIndexForEvent(events[currentIndex]);
+    setWrittenWindowMax((prev) => Math.max(prev, wi));
+  }, [currentIndex, events.length]);
 
   // Auto-scroll to current event (only when playing)
   useEffect(() => {
@@ -91,6 +119,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     if (currentIndex >= events.length - 1) {
       // If at the end, reset to beginning and start playing
       setCurrentIndex(0);
+      setWrittenWindowMax(-1);
       setIsPlaying(true);
     } else {
       // Toggle play/pause
@@ -101,6 +130,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   const handleReset = () => {
     setCurrentIndex(0);
     setIsPlaying(false);
+    setWrittenWindowMax(-1);
   };
 
   const styles = {
@@ -139,10 +169,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     grid: {
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-      gap: '2rem',
-      marginBottom: '3rem'
-    },
-    card: {
       background: 'white',
       borderRadius: '1rem',
       padding: '2.5rem',
@@ -200,10 +226,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       fontSize: '1rem',
       color: '#6B7280',
       marginBottom: '1.5rem'
-    },
-    flagScore: {
-      fontSize: '0.875rem',
-      color: '#9CA3AF'
     },
     metricsCard: {
       background: 'white',
@@ -344,6 +366,15 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       fontWeight: 'bold',
       fontFamily: 'monospace'
     },
+    outputHeadBox: {
+      background: '#4F46E5',
+      color: 'white',
+      padding: '0.25rem 0.75rem',
+      borderRadius: '0.25rem',
+      fontSize: '0.75rem',
+      fontWeight: 'bold',
+      fontFamily: 'monospace'
+    },
     tapeContainer: {
       background: '#F9FAFB',
       borderRadius: '0.75rem',
@@ -352,11 +383,58 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       border: '1px solid #E5E7EB',
       marginBottom: '1.5rem'
     },
+    outputTapeContainer: {
+      background: '#F3F4F6',
+      borderRadius: '0.75rem',
+      padding: '1rem',
+      overflowX: 'auto',
+      border: '1px dashed #E5E7EB',
+      marginBottom: '1.5rem'
+    },
     tape: {
       display: 'flex',
       gap: '0.5rem',
       minWidth: 'min-content',
       padding: '0.5rem 0'
+    },
+    outputTape: {
+      display: 'flex',
+      gap: '0.75rem',
+      minWidth: 'min-content',
+      padding: '0.25rem 0'
+    },
+    outputCell: {
+      minWidth: '220px',
+      background: 'white',
+      border: '2px solid #E5E7EB',
+      borderRadius: '0.75rem',
+      padding: '0.75rem',
+      color: '#111827',
+      transition: 'all 0.2s'
+    },
+    outputCellCurrent: {
+      borderColor: '#4F46E5',
+      boxShadow: '0 0 0 3px rgba(79, 70, 229, 0.15)'
+    },
+    outputCellUnwritten: {
+      background: '#F9FAFB',
+      color: '#9CA3AF'
+    },
+    outputCellHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '0.5rem',
+      fontSize: '0.75rem',
+      color: '#6B7280',
+      fontWeight: 'bold',
+      fontFamily: 'monospace'
+    },
+    outputToken: {
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: '0.95rem',
+      lineHeight: '1.4',
+      color: 'inherit'
     },
     cell: {
       minWidth: '140px',
@@ -477,9 +555,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     score: 0,
     totalQuestions: 10,
     avgTimePerQuestion: '0',
-    suspicionLevel: 'NONE',
+    suspicionLevel: 'Human',
     classification: 'No data available',
     flagSum: '0',
+    flagMax: 5,
     cv: '0',
     repetition: '0',
     entropy: '0',
@@ -537,13 +616,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                     )}
                   </div>
                   <div style={styles.detectionLevel(borderColor)}>
-                    {safeAnalysis.suspicionLevel || 'ANALYZED'}
+                    {safeAnalysis.suspicionLevel || 'Human'}
                   </div>
                   <div style={styles.detectionText}>
                     {safeAnalysis.classification}
-                  </div>
-                  <div style={styles.flagScore}>
-                    Flag Score: {safeAnalysis.flagSum} / 4.0
                   </div>
                 </div>
               </div>
@@ -677,16 +753,32 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       {safeAnalysis.windows.map((w, idx) => {
                         const flagCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 's').length;
                         const cautionCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 'c').length;
+
+                        const isNotApplicable = w.analysis?.hasEnoughData === false;
+
+                        const NOT_INCLUDED_LABEL = 'Not included';
+
+                        // 3-level window result: Human / Caution / Suspicious
+                        // Use both suspicious and caution flags so label + color stay consistent.
+                        let windowResultLabel = 'Human';
                         let rowColor = '#22c55e';
-                        if (flagCount >= 3) rowColor = '#ef4444';
-                        else if (flagCount >= 2 || cautionCount >= 2) rowColor = '#fb923c';
-                        else if (flagCount >= 1 || cautionCount >= 1) rowColor = '#fbbf24';
+
+                        if (isNotApplicable) {
+                          windowResultLabel = NOT_INCLUDED_LABEL;
+                          rowColor = '#9CA3AF';
+                        } else if (flagCount >= 2 || cautionCount >= 3) {
+                          windowResultLabel = 'Suspicious';
+                          rowColor = '#ef4444';
+                        } else if (flagCount >= 1 || cautionCount >= 1) {
+                          windowResultLabel = 'Caution';
+                          rowColor = '#fbbf24';
+                        }
                         
                         const getFlagEmoji = (flag) => {
                           if (flag === 's') return '🚨';
                           if (flag === 'c') return '⚠️';
                           if (flag === 'h') return '✅';
-                          return '—';
+                          return NOT_INCLUDED_LABEL;
                         };
                         
                         return (
@@ -699,7 +791,13 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
                             <td style={{ padding: '0.75rem' }}>
                               <span style={{ color: rowColor, fontWeight: '600', fontSize: '1.2rem' }}>
-                                {flagCount >= 3 ? '🚨 Bot' : flagCount >= 2 ? '⚠️ Review' : flagCount >= 1 ? '⚠️ Caution' : '✅ Normal'}
+                                {windowResultLabel === NOT_INCLUDED_LABEL
+                                  ? NOT_INCLUDED_LABEL
+                                  : windowResultLabel === 'Suspicious'
+                                    ? '🚨 Suspicious'
+                                    : windowResultLabel === 'Caution'
+                                      ? '⚠️ Caution'
+                                      : '✅ Human'}
                               </span>
                             </td>
                           </tr>
@@ -707,14 +805,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       })}
                     </tbody>
                   </table>
-                </div>
-                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#97bce3ff', borderRadius: '0.5rem' }}>
-                  <strong style={{ color: '#1F2937' }}>Window Statistics:</strong>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '0.5rem', fontSize: '0.875rem', color: '#1F2937' }}>
-                    <div>🚨 Suspicious: {safeAnalysis.windowStats.suspiciousRatio}%</div>
-                    <div>⚠️ Caution: {safeAnalysis.windowStats.cautionRatio}%</div>
-                    <div>✅ Human: {safeAnalysis.windowStats.humanRatio}%</div>
-                  </div>
                 </div>
               </div>
             )}
@@ -825,6 +915,45 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       })}
                     </div>
                   </div>
+
+                  {/* Output tape: writes per-window (5s) tokens as the head advances */}
+                  {safeAnalysis.windows && safeAnalysis.windows.length > 0 && (
+                    <>
+                      <div style={styles.headContainer}>
+                        <div style={styles.head}>
+                          <div style={styles.headPointer}>▼</div>
+                          <div style={styles.outputHeadBox}>WRITE HEAD</div>
+                        </div>
+                      </div>
+
+                      <div style={styles.outputTapeContainer}>
+                        <div style={styles.outputTape}>
+                          {safeAnalysis.windows.map((w, wIdx) => {
+                            const isCurrentWindow = wIdx === currentWindowIndex;
+                            const isWritten = wIdx <= writtenWindowMax;
+                            const token = isWritten ? buildWindowToken(w.analysis) : '…';
+
+                            return (
+                              <div
+                                key={wIdx}
+                                style={{
+                                  ...styles.outputCell,
+                                  ...(isCurrentWindow ? styles.outputCellCurrent : {}),
+                                  ...(!isWritten ? styles.outputCellUnwritten : {})
+                                }}
+                              >
+                                <div style={styles.outputCellHeader}>
+                                  <span>{w.window?.start}s - {w.window?.end}s</span>
+                                  <span>W{wIdx + 1}</span>
+                                </div>
+                                <div style={styles.outputToken}>{token}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div style={styles.blockInfo}>
                     <strong>Tape Blocks:</strong> {blocks.length} segments detected

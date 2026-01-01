@@ -1,16 +1,54 @@
-# React + Vite
+# AUTOMATA-G13 (Quiz Behavior Detector)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project is a quiz app that records interaction events during a session and produces a behavior-based classification: **Human**, **Caution**, or **Suspicious**.
 
-Currently, two official plugins are available:
+Behavior evidence is computed from:
+- Session-level metrics (computed across the whole attempt)
+- Window-level metrics (computed per 5-second window)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The UI also includes a Turing Machine–inspired visualization showing:
+- An input tape (raw events)
+- An output tape (per-window metric tokens)
 
-## React Compiler
+## Formal DFA-like Model (Aggregated Evidence)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The implementation is **automata-inspired**: it uses a finite set of states and a deterministic mapping from observed symbols/evidence to a final state. It does **not** implement a classic step-by-step DFA transition function $\delta(q, a)$ over a single symbol stream.
 
-## Expanding the ESLint configuration
+### States
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Let the state set be:
+$$Q = \{q_{human},\ q_{caution},\ q_{suspicious}\}$$
+
+### Per-window symbols
+
+Events are partitioned into 5-second windows. For each window, the analyzer computes 4 metric flags:
+$$\{T, R, E, C\} \in \{h, c, s, n\}$$
+
+Where:
+- $h$ = human-like
+- $c$ = caution
+- $s$ = suspicious
+- $n$ = not enough data
+
+The output tape token is rendered as:
+
+`T_h | R_c | E_n | C_h`
+
+### Evidence aggregation
+
+Across all valid windows, the implementation counts how many per-window metric flags are suspicious or caution:
+
+$$suspiciousRatio = \frac{\#(s)}{validWindows \times 4}$$
+$$cautionRatio = \frac{\#(c)}{validWindows \times 4}$$
+
+In parallel, it computes a session-level score `flagSum` by converting each metric into a discrete flag in $\{0, 0.5, 1\}$ (plus a keyboard-dominance flag) and summing them.
+
+### Deterministic final-state selection
+
+The final DFA state is selected deterministically from the aggregated evidence:
+- Strong evidence of automation-like behavior maps to $q_{suspicious}$
+- Moderate evidence maps to $q_{caution}$
+- Otherwise maps to $q_{human}$
+
+This choice is implemented in [src/utils/analysisHelpers.js](src/utils/analysisHelpers.js).
+

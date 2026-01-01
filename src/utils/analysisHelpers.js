@@ -1,6 +1,8 @@
 // src/utils/analysisHelpers.js
 // Analysis and calculation functions - IMPROVED & FAIR
 
+const uniqueCount = (arr) => new Set(arr).size;
+
 export const calculateCV = (intervals) => {
   if (intervals.length < 2) return 0;
   const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
@@ -15,6 +17,10 @@ export const calculateRepetition = (eventTypes) => {
   const meaningfulEvents = eventTypes.filter(t => 
     t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
   );
+
+  // If the meaningful sequence contains only one unique symbol (e.g., only clicks),
+  // repetition is not informative for bot detection in a quiz context.
+  if (uniqueCount(meaningfulEvents) < 2) return 0;
   
   if (meaningfulEvents.length < 12) return 0;
   
@@ -46,11 +52,33 @@ export const calculateEntropy = (eventTypes) => {
   eventTypes.forEach(t => freq[t] = (freq[t] || 0) + 1);
   let entropy = 0;
   const total = eventTypes.length;
+  if (total === 0) return 0;
   Object.values(freq).forEach(c => {
     const p = c / total;
     if (p > 0) entropy -= p * Math.log2(p);
   });
   return entropy;
+};
+
+// Normalized entropy: H_norm = H / log2(k)
+// This makes entropy comparable across sessions by scaling by the maximum possible
+// entropy of a k-symbol alphabet. For this app, we use k=8 corresponding to the
+// primary event symbols: M, C, H, S, T, R, SUBMIT, CLEAR.
+const DEFAULT_ENTROPY_ALPHABET_SIZE = 8;
+
+export const calculateNormalizedEntropy = (
+  eventTypes,
+  alphabetSize = DEFAULT_ENTROPY_ALPHABET_SIZE
+) => {
+  const H = calculateEntropy(eventTypes);
+  const k = Math.max(1, alphabetSize);
+  if (k <= 1) return 0;
+
+  const Hmax = Math.log2(k);
+  if (Hmax === 0) return 0;
+
+  const Hnorm = H / Hmax;
+  return Math.max(0, Math.min(1, Hnorm));
 };
 
 // FIX #3: Focus on meaningful events, ignore mouse spam
@@ -61,6 +89,10 @@ export const calculateCompression = (eventTypes) => {
   );
   
   if (meaningfulEvents.length < 4) return 1.0; // Not enough data, assume normal
+
+  // If the sequence is effectively one-symbol (e.g., all clicks), compressibility is expected
+  // and not a reliable automation signal for a quiz.
+  if (uniqueCount(meaningfulEvents) < 2) return 1.0;
   
   const original = meaningfulEvents.join('');
   const compressed = original.split('').reduce((acc, char, i, arr) => {
@@ -126,26 +158,37 @@ export const analyzeWindow = (windowEvents) => {
     };
   }
   
-  // Calculate intervals for this window
-  const intervals = [];
-  for (let i = 1; i < clickEvents.length; i++) {
-    intervals.push(clickEvents[i].timestamp - clickEvents[i - 1].timestamp);
-  }
-  
   const eventTypes = windowEvents.map(e => e.type);
-  const cv = calculateCV(intervals);
   const repetition = calculateRepetition(eventTypes);
   const entropy = calculateEntropy(eventTypes);
+  const entropyNorm = calculateNormalizedEntropy(eventTypes);
   const compression = calculateCompression(eventTypes);
+
+  // Timing CV requires at least 2 intervals (>= 3 clicks). With only 2 clicks,
+  // CV collapses to 0 and incorrectly looks "perfectly regular".
+  let cv = null;
+  let Tflag = 'n';
+  if (clickEvents.length >= 3) {
+    const intervals = [];
+    for (let i = 1; i < clickEvents.length; i++) {
+      intervals.push(clickEvents[i].timestamp - clickEvents[i - 1].timestamp);
+    }
+    cv = calculateCV(intervals);
+    Tflag = cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h');
+  }
+
+  // Entropy is only meaningful when there's some diversity in observed event symbols.
+  const hasEntropyDiversity = uniqueCount(eventTypes) >= 2;
   
   // Return symbolic flags: s=suspicious, c=caution, h=human, n=not enough data
   return {
     hasEnoughData: true,
-    T: cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h'),
+    T: Tflag,
     R: repetition >= 0.75 ? 's' : (repetition >= 0.60 ? 'c' : 'h'),
-    E: entropy < 1.2 ? 's' : (entropy < 1.8 ? 'c' : 'h'),
+    // Use normalized entropy thresholds (mapped from previous raw thresholds)
+    E: !hasEntropyDiversity ? 'n' : (entropyNorm < 0.40 ? 's' : (entropyNorm < 0.60 ? 'c' : 'h')),
     C: compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h'),
-    values: { cv, repetition, entropy, compression }
+    values: { cv, repetition, entropy, entropyNorm, compression }
   };
 };
 
@@ -207,6 +250,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const cv = calculateCV(intervals);
   const repetition = calculateRepetition(eventTypes);
   const entropy = calculateEntropy(eventTypes);
+  const entropyNorm = calculateNormalizedEntropy(eventTypes);
   const compression = calculateCompression(eventTypes);
 
   // Check for keyboard-only usage (suspicious for a quiz)
@@ -216,12 +260,15 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const keyboardRatio = totalClicks > 0 ? keyboardClicks.length / totalClicks : 0;
   
   // Red flag: Using ONLY keyboard (bots often use keyboard automation)
-  const keyboardOnlyFlag = keyboardRatio >= 0.80 ? 1 : (keyboardRatio >= 0.50 ? 0.5 : 0);
+  const keyboardOnlyFlag = totalClicks >= 5
+    ? (keyboardRatio >= 0.90 ? 1 : (keyboardRatio >= 0.70 ? 0.5 : 0))
+    : 0;
 
   // Overall flags (including keyboard usage)
   const timingFlag = cv < 0.08 ? 1 : (cv < 0.20 ? 0.5 : 0);
   const repetitionFlag = repetition >= 0.75 ? 1 : (repetition >= 0.60 ? 0.5 : 0);
-  const entropyFlag = entropy < 1.2 ? 1 : (entropy < 1.8 ? 0.5 : 0);
+  // Normalized entropy thresholds (mapped from previous raw thresholds)
+  const entropyFlag = uniqueCount(eventTypes) < 2 ? 0 : (entropyNorm < 0.40 ? 1 : (entropyNorm < 0.60 ? 0.5 : 0));
   const compressionFlag = compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0);
   const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
@@ -234,7 +281,8 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     cautionRatio = totalCaution / (validWindows * 4);
   } else {
     // Fallback: convert overall flags to ratios
-    suspiciousRatio = flagSum / 4;
+    // flagSum includes 5 possible evidence sources (T/R/E/C + keyboard)
+    suspiciousRatio = flagSum / 5;
     cautionRatio = 0;
   }
   
@@ -243,40 +291,44 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const totalTimeSec = (totalTimeMs / 1000).toFixed(0);
   const avgTimePerQuestion = totalTimeMs / questions.length / 1000;
   
-  const tooFast = avgTimePerQuestion < 2;
+  // Stricter "too fast" threshold to avoid flagging legitimately fast humans
+  const tooFast = avgTimePerQuestion < 1.0;
   const perfectScore = score === questions.length;
   const suspiciousCombo = tooFast && perfectScore;
 
   // DFA Classification (enhanced with windowed analysis)
+  // NOTE: This project uses a strict 3-state DFA: q_human / q_caution / q_suspicious
+  // UI requirement: Detection Result must show only Human / Caution / Suspicious,
+  // and the description must not include sub-labels like "HIGH SUSPICION".
   let classification, color, suspicionLevel, dfaState;
   
   // More lenient thresholds for realistic human behavior
-  // q_bot: High suspicion across multiple windows (raised from 0.50 to 0.60)
-  if (suspiciousRatio >= 0.60 || flagSum >= 3 || suspiciousCombo) {
-    classification = "HIGH SUSPICION - Likely Automated";
+  // High suspicion maps to q_suspicious (no separate q_bot state)
+  if (suspiciousRatio >= 0.65 || flagSum >= 3.5 || suspiciousCombo) {
+    classification = "Behavior matches multiple automation-like patterns. Review recommended.";
     color = "#ef4444";
-    suspicionLevel = "HIGH";
-    dfaState = "q_bot";
+    suspicionLevel = "Suspicious";
+    dfaState = "q_suspicious";
   } 
-  // q_suspicious: Moderate flags (raised from 0.25 to 0.40)
-  else if (suspiciousRatio >= 0.40 || (suspiciousRatio + cautionRatio) >= 0.65 || flagSum >= 2.5) {
-    classification = "MODERATE SUSPICION - Review Needed";
+  // Moderate suspicion also maps to q_suspicious
+  else if (suspiciousRatio >= 0.45 || (suspiciousRatio + cautionRatio) >= 0.70 || flagSum >= 2.5) {
+    classification = "Some signals are unusual and may indicate automation. Review recommended.";
     color = "#fb923c";
-    suspicionLevel = "MODERATE";
+    suspicionLevel = "Suspicious";
     dfaState = "q_suspicious";
   }
   // q_caution: Some irregularities (raised from 0.25 to 0.35)
   else if (cautionRatio >= 0.35 || flagSum >= 1.5) {
-    classification = "LOW SUSPICION - Minor Irregularities";
+    classification = "Minor irregularities detected. Could be normal behavior or assisted input.";
     color = "#fbbf24";
-    suspicionLevel = "LOW";
+    suspicionLevel = "Caution";
     dfaState = "q_caution";
   }
   // q_human: Normal behavior
   else {
-    classification = "NO SUSPICION - Normal Human Behavior";
+    classification = "No strong automation signals detected.";
     color = "#22c55e";
-    suspicionLevel = "NONE";
+    suspicionLevel = "Human";
     dfaState = "q_human";
   }
 
@@ -286,8 +338,10 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     cv: cv.toFixed(3),
     repetition: (repetition * 100).toFixed(1),
     entropy: entropy.toFixed(2),
+    entropyNorm: entropyNorm.toFixed(2),
     compression: compression.toFixed(2),
     flagSum: flagSum.toFixed(1),
+    flagMax: 5,
     classification,
     color,
     suspicionLevel,
@@ -321,3 +375,4 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     }
   };
 };
+
