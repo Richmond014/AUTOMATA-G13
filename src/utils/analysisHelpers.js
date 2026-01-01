@@ -53,7 +53,7 @@ export const calculateEntropy = (eventTypes) => {
   return entropy;
 };
 
-//Focus on meaningful events, ignore mouse spam
+// FIX #3: Focus on meaningful events, ignore mouse spam
 export const calculateCompression = (eventTypes) => {
   // Only analyze clicks, hovers, scrolls - ignore mouse movements
   const meaningfulEvents = eventTypes.filter(t => 
@@ -71,7 +71,7 @@ export const calculateCompression = (eventTypes) => {
   return compressed.length / original.length;
 };
 
-//Partition events into 5-second windows
+// NEW: Partition events into 5-second windows
 export const partitionIntoWindows = (events, windowSizeMs = 5000) => {
   if (events.length === 0) return [];
   
@@ -111,7 +111,7 @@ export const partitionIntoWindows = (events, windowSizeMs = 5000) => {
   return windows;
 };
 
-//Analyze single window and return flags
+// Analyze single window and return flags
 export const analyzeWindow = (windowEvents) => {
   const clickEvents = windowEvents.filter(e => e.type === "C");
   
@@ -138,7 +138,7 @@ export const analyzeWindow = (windowEvents) => {
   const entropy = calculateEntropy(eventTypes);
   const compression = calculateCompression(eventTypes);
   
-  //Return symbolic flags: s=suspicious, c=caution, h=human, n=not enough data
+  // Return symbolic flags: s=suspicious, c=caution, h=human, n=not enough data
   return {
     hasEnoughData: true,
     T: cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h'),
@@ -150,7 +150,7 @@ export const analyzeWindow = (windowEvents) => {
 };
 
 export const analyzeQuizBehavior = (score, events, questions, startTimeValue) => {
-  //Check for minimum CLICK events, not just total events
+  // FIX #2: Check for minimum CLICK events, not just total events
   const clickEvents = events.filter(e => e.type === "C");
   
   if (clickEvents.length < 3) {
@@ -164,18 +164,19 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     };
   }
 
-  // Partition into 5-second windows and analyze each
+  //  Partition into 5-second windows and analyze each
   const windows = partitionIntoWindows(events, 5000);
-  const windowAnalyses = windows.map(window => ({
+  const windowAnalyses = windows.map((window, idx) => ({
     window: {
-      start: ((window.startTime - events[0].timestamp) / 1000).toFixed(1),
-      end: ((window.endTime - events[0].timestamp) / 1000).toFixed(1)
+      start: (idx * 5).toFixed(1),  
+      end: ((idx + 1) * 5).toFixed(1)  
     },
     eventCount: window.events.length,
     analysis: analyzeWindow(window.events)
   }));
   
   // Count total flags across all windows (DFA state accumulation)
+  // Only count windows with enough data
   let totalSuspicious = 0;
   let totalCaution = 0;
   let totalHuman = 0;
@@ -188,9 +189,13 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
         if (wa.analysis[metric] === 's') totalSuspicious++;
         else if (wa.analysis[metric] === 'c') totalCaution++;
         else if (wa.analysis[metric] === 'h') totalHuman++;
+        // 'n' (not enough data) is ignored
       });
     }
   });
+
+  // If less than 2 valid windows, use overall metrics instead
+  const useWindowedAnalysis = validWindows >= 2;
 
   // Calculate overall metrics (for backward compatibility)
   const intervals = [];
@@ -204,16 +209,34 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const entropy = calculateEntropy(eventTypes);
   const compression = calculateCompression(eventTypes);
 
-  // Overall flags
+  // Check for keyboard-only usage (suspicious for a quiz)
+  const keyboardEvents = events.filter(e => e.type === 'TAB_NAV' || e.type === 'KEY_SELECT');
+  const keyboardClicks = clickEvents.filter(e => e.metadata && e.metadata.method === 'keyboard');
+  const totalClicks = clickEvents.length;
+  const keyboardRatio = totalClicks > 0 ? keyboardClicks.length / totalClicks : 0;
+  
+  // Red flag: Using ONLY keyboard (bots often use keyboard automation)
+  const keyboardOnlyFlag = keyboardRatio >= 0.80 ? 1 : (keyboardRatio >= 0.50 ? 0.5 : 0);
+
+  // Overall flags (including keyboard usage)
   const timingFlag = cv < 0.08 ? 1 : (cv < 0.20 ? 0.5 : 0);
   const repetitionFlag = repetition >= 0.75 ? 1 : (repetition >= 0.60 ? 0.5 : 0);
   const entropyFlag = entropy < 1.2 ? 1 : (entropy < 1.8 ? 0.5 : 0);
   const compressionFlag = compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0);
-  const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag;
+  const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
   // DFA State Machine: Determine final state based on window analyses
-  const suspiciousRatio = validWindows > 0 ? totalSuspicious / (validWindows * 4) : 0;
-  const cautionRatio = validWindows > 0 ? totalCaution / (validWindows * 4) : 0;
+  // Use windowed analysis if we have enough windows, otherwise fall back to overall metrics
+  let suspiciousRatio, cautionRatio;
+  
+  if (useWindowedAnalysis && validWindows > 0) {
+    suspiciousRatio = totalSuspicious / (validWindows * 4);
+    cautionRatio = totalCaution / (validWindows * 4);
+  } else {
+    // Fallback: convert overall flags to ratios
+    suspiciousRatio = flagSum / 4;
+    cautionRatio = 0;
+  }
   
   // Calculate total time and average time per question
   const totalTimeMs = Date.now() - startTimeValue;
@@ -227,22 +250,23 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   // DFA Classification (enhanced with windowed analysis)
   let classification, color, suspicionLevel, dfaState;
   
-  // q_bot: High suspicion across multiple windows
-  if (suspiciousRatio >= 0.50 || flagSum >= 3 || suspiciousCombo) {
+  // More lenient thresholds for realistic human behavior
+  // q_bot: High suspicion across multiple windows (raised from 0.50 to 0.60)
+  if (suspiciousRatio >= 0.60 || flagSum >= 3 || suspiciousCombo) {
     classification = "HIGH SUSPICION - Likely Automated";
     color = "#ef4444";
     suspicionLevel = "HIGH";
     dfaState = "q_bot";
   } 
-  // q_suspicious: Moderate flags or mix of suspicious/caution
-  else if (suspiciousRatio >= 0.25 || (suspiciousRatio + cautionRatio) >= 0.50 || flagSum >= 2) {
+  // q_suspicious: Moderate flags (raised from 0.25 to 0.40)
+  else if (suspiciousRatio >= 0.40 || (suspiciousRatio + cautionRatio) >= 0.65 || flagSum >= 2.5) {
     classification = "MODERATE SUSPICION - Review Needed";
     color = "#fb923c";
     suspicionLevel = "MODERATE";
     dfaState = "q_suspicious";
   }
-  // q_caution: Some irregularities but mostly normal
-  else if (cautionRatio >= 0.25 || flagSum >= 1) {
+  // q_caution: Some irregularities (raised from 0.25 to 0.35)
+  else if (cautionRatio >= 0.35 || flagSum >= 1.5) {
     classification = "LOW SUSPICION - Minor Irregularities";
     color = "#fbbf24";
     suspicionLevel = "LOW";
@@ -278,10 +302,14 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     tabSwitches: events.filter(e => e.type === "T" || e.type === "R").length,
     submits: events.filter(e => e.type === "SUBMIT").length,
     clears: events.filter(e => e.type === "CLEAR").length,
+    keyboardNavigation: keyboardEvents.length,
+    keyboardClicks: keyboardClicks.length,
+    keyboardRatio: (keyboardRatio * 100).toFixed(1),
     timingFlag,
     repetitionFlag,
     entropyFlag,
     compressionFlag,
+    keyboardOnlyFlag,
     // NEW: Windowed analysis data
     windows: windowAnalyses,
     windowStats: {

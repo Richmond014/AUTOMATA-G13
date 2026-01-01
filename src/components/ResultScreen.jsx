@@ -48,7 +48,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
     const timer = setTimeout(() => {
       setCurrentIndex(prev => prev + 1);
-    }, 1500);
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [isPlaying, currentIndex, events.length]);
@@ -664,13 +664,13 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                     <thead>
                       <tr style={{ borderBottom: '3px solid rgb(96, 165, 250)' }}>
-                     <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Window</th>
-<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Events</th>
-<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>T</th>
-<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>R</th>
-<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>E</th>
-<th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>C</th>
-<th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Result</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Window</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Events</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>T</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>R</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>E</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>C</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Result</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -690,13 +690,13 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                         };
                         
                         return (
-                          <tr key={idx} style={{ borderBottom: '#3px solid rgb(96, 165, 250)' }}>
-                            <td style={{ padding: '0.75rem', color: 'black'}}>{w.window.start}s - {w.window.end}s</td>
+                          <tr key={idx} style={{ borderBottom: '1px solid rgb(229, 231, 235)' }}>
+                            <td style={{ padding: '0.75rem', color: 'black' }}>{w.window.start}s - {w.window.end}s</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{w.eventCount}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.T)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.R)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.E)}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center' , color: 'black'}}>{getFlagEmoji(w.analysis.C)}</td>
+                            <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
                             <td style={{ padding: '0.75rem' }}>
                               <span style={{ color: rowColor, fontWeight: '600', fontSize: '1.2rem' }}>
                                 {flagCount >= 3 ? '🚨 Bot' : flagCount >= 2 ? '⚠️ Review' : flagCount >= 1 ? '⚠️ Caution' : '✅ Normal'}
@@ -709,8 +709,8 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                   </table>
                 </div>
                 <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#97bce3ff', borderRadius: '0.5rem' }}>
-                  <strong>Window Statistics:</strong>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                  <strong style={{ color: '#1F2937' }}>Window Statistics:</strong>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '0.5rem', fontSize: '0.875rem', color: '#1F2937' }}>
                     <div>🚨 Suspicious: {safeAnalysis.windowStats.suspiciousRatio}%</div>
                     <div>⚠️ Caution: {safeAnalysis.windowStats.cautionRatio}%</div>
                     <div>✅ Human: {safeAnalysis.windowStats.humanRatio}%</div>
