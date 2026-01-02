@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, RotateCcw } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, RotateCcw } from 'lucide-react';
 
 function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome, events = [] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -60,7 +60,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     return ['T', 'R', 'E', 'C'].map((m) => flagToToken(m, analysisObj[m])).join(' | ');
   };
 
-  // Auto-play animation with adjusted speed (500ms per event)
+  // Auto-play animation with adjusted speed
   useEffect(() => {
     if (!isPlaying || currentIndex >= events.length - 1) {
       if (currentIndex >= events.length - 1) setIsPlaying(false);
@@ -69,7 +69,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
     const timer = setTimeout(() => {
       setCurrentIndex(prev => prev + 1);
-    }, 1500);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, [isPlaying, currentIndex, events.length]);
@@ -743,10 +743,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       <tr style={{ borderBottom: '3px solid rgb(96, 165, 250)' }}>
                         <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Window</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Events</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>T</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>R</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>E</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>C</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Time</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Repetition</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Entropy</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Compression</th>
                         <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Result</th>
                       </tr>
                     </thead>
@@ -760,7 +760,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                         const NOT_INCLUDED_LABEL = 'Not included';
 
                         // 3-level window result: Human / Caution / Suspicious
-                        // Use both suspicious and caution flags so label + color stay consistent.
                         let windowResultLabel = 'Human';
                         let rowColor = '#22c55e';
 
@@ -775,13 +774,12 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                           rowColor = '#fbbf24';
                         }
                         
-                        const getFlagEmoji = (flag) => {
-                          if (flag === 's') return '🚨';
-                          if (flag === 'c') return '⚠️';
-                          if (flag === 'h') return '✅';
-                          return 'N/A';
-                        };
-                        
+                    const getFlagEmoji = (flag, color) => {
+  if (flag === 's') return <AlertCircle size={16} color={color || '#ef4444'} />;
+  if (flag === 'c') return <AlertTriangle size={16} color={color || '#fbbf24'} />;
+  if (flag === 'h') return <CheckCircle size={16} color={color || '#22c55e'} />;
+  return 'N/A'; 
+};
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid rgb(229, 231, 235)' }}>
                             <td style={{ padding: '0.75rem', color: 'black' }}>{w.window.start}s - {w.window.end}s</td>
@@ -791,15 +789,12 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.E)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
                             <td style={{ padding: '0.75rem' }}>
-                              <span style={{ color: rowColor, fontWeight: '600', fontSize: '1.2rem' }}>
-                                {windowResultLabel === NOT_INCLUDED_LABEL
-                                  ? NOT_INCLUDED_LABEL
-                                  : windowResultLabel === 'Suspicious'
-                                    ? '🚨 Suspicious'
-                                    : windowResultLabel === 'Caution'
-                                      ? '⚠️ Caution'
-                                      : '✅ Human'}
-                              </span>
+                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: rowColor, fontWeight: 600 }}>
+  {windowResultLabel === 'Suspicious' && <AlertCircle size={18} />}
+  {windowResultLabel === 'Caution' && <AlertTriangle size={18} />}
+  {windowResultLabel === 'Human' && <CheckCircle size={18} />}
+  {windowResultLabel}
+</span>
                             </td>
                           </tr>
                         );

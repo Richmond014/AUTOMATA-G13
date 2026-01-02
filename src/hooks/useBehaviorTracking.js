@@ -40,11 +40,11 @@ export const useBehaviorTracking = () => {
       }
     };
 
-    // ============================================
+
     // GLOBAL CLICK TRACKING
-    // ============================================
+   
     const handleGlobalClick = (e) => {
-      // Don't track clicks until quiz is initialized
+
       if (!isInitialized.current) return;
       
       const now = Date.now();
@@ -54,7 +54,7 @@ export const useBehaviorTracking = () => {
         const x = Math.round(e.clientX - rect.left);
         const y = Math.round(e.clientY - rect.top);
         
-        // Prevent duplicate clicks at same position within 100ms
+      
         const timeDiff = now - lastClickInfo.time;
         const xDiff = Math.abs(x - lastClickInfo.x);
         const yDiff = Math.abs(y - lastClickInfo.y);
@@ -70,7 +70,7 @@ export const useBehaviorTracking = () => {
         let elementType = target.tagName.toLowerCase();
         let elementText = '';
         
-        // Skip radio inputs - we already caught them via label
+   
         if (target.matches('input[type="radio"]')) {
           return;
         }
@@ -157,7 +157,7 @@ export const useBehaviorTracking = () => {
     recordEvent('H', metadata);
   };
 
-  // Keyboard tracking helper
+
   const recordKeyboard = (action, metadata = {}) => {
     if (!isInitialized.current) return;
     

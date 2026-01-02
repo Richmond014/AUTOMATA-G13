@@ -106,12 +106,12 @@ const styles = {
     justifyContent: 'center',
     flexShrink: 0,
     transition: 'all 0.2s',
-    backgroundColor: 'white', // Ensure white background
-    boxSizing: 'border-box' // Ensure border is included in dimensions
+    backgroundColor: 'white', 
+    boxSizing: 'border-box' 
   },
   radioOuterSelected: {
-    border: '2px solid #6366F1', // Explicitly set border instead of just borderColor
-    backgroundColor: 'white' // Keep white background when selected
+    border: '2px solid #6366F1', 
+    backgroundColor: 'white' 
   },
   radioInner: {
     width: '10px',

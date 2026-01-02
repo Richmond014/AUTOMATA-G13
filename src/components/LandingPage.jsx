@@ -46,6 +46,7 @@ function LandingPage({ onStartQuiz }) {
     },
     hero: {
       maxWidth: '1200px',
+      marginTop: '-40px',
       margin: '0 auto',
       padding: '4rem 2rem',
       display: 'grid',
@@ -101,8 +102,8 @@ function LandingPage({ onStartQuiz }) {
       alignItems: 'center'
     },
     image: {
-      width: '100%',
-      maxWidth: '500px',
+      width: '150%',
+      maxWidth: '1000px',
       height: 'auto'
     }
   };

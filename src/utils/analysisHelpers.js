@@ -11,7 +11,7 @@ export const calculateCV = (intervals) => {
   return mean === 0 ? 0 : stdDev / mean;
 };
 
-// FIX #4: Focus on meaningful actions, not mouse spam
+// Focus on meaningful actions, not mouse spam
 export const calculateRepetition = (eventTypes) => {
   // Filter out mouse movements - they naturally cluster
   const meaningfulEvents = eventTypes.filter(t => 
@@ -19,7 +19,6 @@ export const calculateRepetition = (eventTypes) => {
   );
 
   // If the meaningful sequence contains only one unique symbol (e.g., only clicks),
-  // repetition is not informative for bot detection in a quiz context.
   if (uniqueCount(meaningfulEvents) < 2) return 0;
   
   if (meaningfulEvents.length < 12) return 0;
@@ -60,10 +59,8 @@ export const calculateEntropy = (eventTypes) => {
   return entropy;
 };
 
-// Normalized entropy: H_norm = H / log2(k)
+
 // This makes entropy comparable across sessions by scaling by the maximum possible
-// entropy of a k-symbol alphabet. For this app, we use k=8 corresponding to the
-// primary event symbols: M, C, H, S, T, R, SUBMIT, CLEAR.
 const DEFAULT_ENTROPY_ALPHABET_SIZE = 8;
 
 export const calculateNormalizedEntropy = (
@@ -81,7 +78,7 @@ export const calculateNormalizedEntropy = (
   return Math.max(0, Math.min(1, Hnorm));
 };
 
-// FIX #3: Focus on meaningful events, ignore mouse spam
+// Focus on meaningful events, ignore mouse spam
 export const calculateCompression = (eventTypes) => {
   // Only analyze clicks, hovers, scrolls - ignore mouse movements
   const meaningfulEvents = eventTypes.filter(t => 
@@ -91,7 +88,6 @@ export const calculateCompression = (eventTypes) => {
   if (meaningfulEvents.length < 4) return 1.0; // Not enough data, assume normal
 
   // If the sequence is effectively one-symbol (e.g., all clicks), compressibility is expected
-  // and not a reliable automation signal for a quiz.
   if (uniqueCount(meaningfulEvents) < 2) return 1.0;
   
   const original = meaningfulEvents.join('');
@@ -103,7 +99,7 @@ export const calculateCompression = (eventTypes) => {
   return compressed.length / original.length;
 };
 
-// NEW: Partition events into 5-second windows
+// Partition events into 5-second windows
 export const partitionIntoWindows = (events, windowSizeMs = 5000) => {
   if (events.length === 0) return [];
   
@@ -131,7 +127,7 @@ export const partitionIntoWindows = (events, windowSizeMs = 5000) => {
     }
   });
   
-  // Add last window
+ 
   if (currentWindow.length > 0) {
     windows.push({
       startTime: currentWindowStart,
@@ -165,7 +161,6 @@ export const analyzeWindow = (windowEvents) => {
   const compression = calculateCompression(eventTypes);
 
   // Timing CV requires at least 2 intervals (>= 3 clicks). With only 2 clicks,
-  // CV collapses to 0 and incorrectly looks "perfectly regular".
   let cv = null;
   let Tflag = 'n';
   if (clickEvents.length >= 3) {
@@ -193,7 +188,7 @@ export const analyzeWindow = (windowEvents) => {
 };
 
 export const analyzeQuizBehavior = (score, events, questions, startTimeValue) => {
-  // FIX #2: Check for minimum CLICK events, not just total events
+  // Check for minimum CLICK events, not just total events
   const clickEvents = events.filter(e => e.type === "C");
   
   if (clickEvents.length < 3) {
@@ -253,13 +248,13 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const entropyNorm = calculateNormalizedEntropy(eventTypes);
   const compression = calculateCompression(eventTypes);
 
-  // Check for keyboard-only usage (suspicious for a quiz)
+
   const keyboardEvents = events.filter(e => e.type === 'TAB_NAV' || e.type === 'KEY_SELECT');
   const keyboardClicks = clickEvents.filter(e => e.metadata && e.metadata.method === 'keyboard');
   const totalClicks = clickEvents.length;
   const keyboardRatio = totalClicks > 0 ? keyboardClicks.length / totalClicks : 0;
   
-  // Red flag: Using ONLY keyboard (bots often use keyboard automation)
+
   const keyboardOnlyFlag = totalClicks >= 5
     ? (keyboardRatio >= 0.90 ? 1 : (keyboardRatio >= 0.70 ? 0.5 : 0))
     : 0;
@@ -273,14 +268,13 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
   // DFA State Machine: Determine final state based on window analyses
-  // Use windowed analysis if we have enough windows, otherwise fall back to overall metrics
   let suspiciousRatio, cautionRatio;
   
   if (useWindowedAnalysis && validWindows > 0) {
     suspiciousRatio = totalSuspicious / (validWindows * 4);
     cautionRatio = totalCaution / (validWindows * 4);
   } else {
-    // Fallback: convert overall flags to ratios
+    
     // flagSum includes 5 possible evidence sources (T/R/E/C + keyboard)
     suspiciousRatio = flagSum / 5;
     cautionRatio = 0;
@@ -296,14 +290,11 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const perfectScore = score === questions.length;
   const suspiciousCombo = tooFast && perfectScore;
 
-  // DFA Classification (enhanced with windowed analysis)
-  // NOTE: This project uses a strict 3-state DFA: q_human / q_caution / q_suspicious
-  // UI requirement: Detection Result must show only Human / Caution / Suspicious,
-  // and the description must not include sub-labels like "HIGH SUSPICION".
+
   let classification, color, suspicionLevel, dfaState;
   
-  // More lenient thresholds for realistic human behavior
-  // High suspicion maps to q_suspicious (no separate q_bot state)
+ 
+  // More lenient thresholds for realistic human behavior. High suspicion maps to q_suspicious (no separate q_bot state)
   if (suspiciousRatio >= 0.65 || flagSum >= 3.5 || suspiciousCombo) {
     classification = "Behavior matches multiple automation-like patterns. Review recommended.";
     color = "#ef4444";
@@ -364,7 +355,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     entropyFlag,
     compressionFlag,
     keyboardOnlyFlag,
-    // NEW: Windowed analysis data
+    //Windowed analysis data
     windows: windowAnalyses,
     windowStats: {
       totalWindows: windows.length,

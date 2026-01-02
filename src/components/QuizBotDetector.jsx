@@ -18,9 +18,7 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
   const { events, quizAreaRef, recordEvent, recordHover, recordKeyboard } = useBehaviorTracking();
 
   const handleAnswerChange = (question, value) => {
-    // ❌ REMOVE THIS - Global click listener already handles it!
-    // Don't record here, the global click listener will catch it
-    
+ 
     setAnswers(prev => ({ ...prev, [question]: value }));
     setWarnings(prev => ({ ...prev, [question]: false }));
   };
