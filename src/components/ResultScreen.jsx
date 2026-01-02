@@ -69,7 +69,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
     const timer = setTimeout(() => {
       setCurrentIndex(prev => prev + 1);
-    }, 500);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [isPlaying, currentIndex, events.length]);
@@ -232,7 +232,8 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       borderRadius: '1rem',
       padding: '2.5rem',
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      marginBottom: '3rem'
+      marginBottom: '3rem',
+      marginTop: '3rem'
     },
     metricsGrid: {
       display: 'grid',

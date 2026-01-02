@@ -8,7 +8,7 @@ export const QuestionCard = ({
   warning, 
   onAnswerChange, 
   onHover,
-  onSuspiciousEvent   // ✅ add this if you want to log suspicious behavior
+  onKeyboard // ✅ For keyboard tracking
 }) => {
   return (
     <div 
@@ -31,18 +31,22 @@ export const QuestionCard = ({
           return (
             <label
               key={option.value}
+              data-question={question.id}  // ✅ ADD THIS for tracking
+              data-answer={option.value}    // ✅ ADD THIS for tracking
               style={{
                 ...styles.optionLabel,
                 ...(isSelected ? styles.optionLabelSelected : {})
               }}
               onMouseEnter={(e) => {
                 onHover && onHover('option', e);
+                if (!isSelected) {
+                  e.currentTarget.style.transform = 'translateX(4px)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateX(0)';
               }}
             >
-
-              {/*  ✅ DO NOT HIDE INPUT
-                  Instead visually hide but keep focusable
-              */}
               <input
                 type="radio"
                 name={question.id}
@@ -51,16 +55,14 @@ export const QuestionCard = ({
                 onChange={(e) => onAnswerChange(question.id, e.target.value)}
                 tabIndex={0}
                 
-                // ✅ Detect keyboard suspicious behavior
+                // ✅ Detect keyboard navigation
                 onKeyDown={(e) => {
-                  // If they use keyboard to answer
-                  if (onSuspiciousEvent) {
+                  if (onKeyboard) {
                     if (e.key === "Tab" || e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-                      onSuspiciousEvent({
-                        type: "keyboard-navigation",
+                      onKeyboard("key-press", {
                         key: e.key,
                         questionId: question.id,
-                        timestamp: Date.now()
+                        optionValue: option.value
                       });
                     }
                   }
@@ -75,11 +77,13 @@ export const QuestionCard = ({
                   const currentIndex = question.options.findIndex(o => o.value === option.value);
 
                   if (e.key === "ArrowDown") {
+                    e.preventDefault();
                     const next = question.options[currentIndex + 1];
                     if (next) onAnswerChange(question.id, next.value);
                   }
 
                   if (e.key === "ArrowUp") {
+                    e.preventDefault();
                     const prev = question.options[currentIndex - 1];
                     if (prev) onAnswerChange(question.id, prev.value);
                   }
@@ -143,14 +147,11 @@ const styles = {
     background: '#EEF2FF',
     borderColor: '#6366F1'
   },
-
-  // 👇 keeps input focusable like Google Forms
   realRadio: {
     position: 'absolute',
     opacity: 0,
     pointerEvents: 'none'
   },
-
   radioOuter: {
     width: '20px',
     height: '20px',
