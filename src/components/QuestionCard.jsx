@@ -1,44 +1,31 @@
 // src/components/quiz/QuestionCard.jsx
 import React from 'react';
 
-export const QuestionCard = ({ 
-  question, 
-  index, 
-  selectedAnswer, 
-  warning, 
-  onAnswerChange, 
-  onHover,
-  onKeyboard // ✅ For keyboard tracking
-}) => {
+export const QuestionCard = ({ question, index, selectedAnswer, warning, onAnswerChange, onHover }) => {
   return (
     <div 
       id={`question-${index}`} 
       style={styles.questionCard}
-      onMouseEnter={(e) => onHover && onHover('question-card', e)}
+      onMouseEnter={(e) => onHover && onHover('question-card', e)}  // ✅ Pass event
     >
       <h3 style={styles.questionTitle}>
         {index + 1}. {question.question}
       </h3>
-
       {warning && (
         <p style={styles.warningText}>⚠ Please answer this question</p>
       )}
-
       <div style={styles.optionsContainer}>
         {question.options.map(option => {
           const isSelected = selectedAnswer === option.value;
-
           return (
             <label
               key={option.value}
-              data-question={question.id}  // ✅ ADD THIS for tracking
-              data-answer={option.value}    // ✅ ADD THIS for tracking
               style={{
                 ...styles.optionLabel,
                 ...(isSelected ? styles.optionLabelSelected : {})
               }}
               onMouseEnter={(e) => {
-                onHover && onHover('option', e);
+                onHover && onHover('option', e);  // ✅ Pass event
                 if (!isSelected) {
                   e.currentTarget.style.transform = 'translateX(4px)';
                 }
@@ -53,52 +40,14 @@ export const QuestionCard = ({
                 value={option.value}
                 checked={isSelected}
                 onChange={(e) => onAnswerChange(question.id, e.target.value)}
-                tabIndex={0}
-                
-                // ✅ Detect keyboard navigation
-                onKeyDown={(e) => {
-                  if (onKeyboard) {
-                    if (e.key === "Tab" || e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-                      onKeyboard("key-press", {
-                        key: e.key,
-                        questionId: question.id,
-                        optionValue: option.value
-                      });
-                    }
-                  }
-
-                  // Google Forms style control
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onAnswerChange(question.id, option.value);
-                  }
-
-                  // Arrow navigation between options
-                  const currentIndex = question.options.findIndex(o => o.value === option.value);
-
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    const next = question.options[currentIndex + 1];
-                    if (next) onAnswerChange(question.id, next.value);
-                  }
-
-                  if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    const prev = question.options[currentIndex - 1];
-                    if (prev) onAnswerChange(question.id, prev.value);
-                  }
-                }}
-
-                style={styles.realRadio}
+                style={{ display: 'none' }}
               />
-
               <div style={{
                 ...styles.radioOuter,
                 ...(isSelected ? styles.radioOuterSelected : {})
               }}>
                 {isSelected && <div style={styles.radioInner} />}
               </div>
-
               <span style={styles.optionText}>{option.text}</span>
             </label>
           );
@@ -147,12 +96,7 @@ const styles = {
     background: '#EEF2FF',
     borderColor: '#6366F1'
   },
-  realRadio: {
-    position: 'absolute',
-    opacity: 0,
-    pointerEvents: 'none'
-  },
-  radioOuter: {
+   radioOuter: {
     width: '20px',
     height: '20px',
     borderRadius: '50%',
@@ -160,10 +104,14 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0
+    flexShrink: 0,
+    transition: 'all 0.2s',
+    backgroundColor: 'white', // Ensure white background
+    boxSizing: 'border-box' // Ensure border is included in dimensions
   },
   radioOuterSelected: {
-    borderColor: '#6366F1'
+    border: '2px solid #6366F1', // Explicitly set border instead of just borderColor
+    backgroundColor: 'white' // Keep white background when selected
   },
   radioInner: {
     width: '10px',

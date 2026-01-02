@@ -779,7 +779,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                           if (flag === 's') return '🚨';
                           if (flag === 'c') return '⚠️';
                           if (flag === 'h') return '✅';
-                          return NOT_INCLUDED_LABEL;
+                          return 'N/A';
                         };
                         
                         return (
