@@ -261,6 +261,32 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
   const compression = calculateCompression(eventTypes);
 
+  // Window-aggregated metrics (match Analysis Metrics UI to 5s windowing)
+  const validWindowAnalyses = windowAnalyses.filter(wa => wa.analysis?.hasEnoughData);
+  const avgNumber = (values) => {
+    const nums = values.filter(v => typeof v === 'number' && Number.isFinite(v));
+    if (nums.length === 0) return null;
+    return nums.reduce((a, b) => a + b, 0) / nums.length;
+  };
+
+  const windowCvAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.cv));
+  const windowRepetitionAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.repetition));
+  const windowEntropyAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.entropy));
+  const windowEntropyNormAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.entropyNorm));
+  const windowCompressionAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.compression));
+
+  const windowedMetrics = {
+    cv: ((windowCvAvg ?? cv)).toFixed(3),
+    repetition: (((windowRepetitionAvg ?? repetition) * 100)).toFixed(1),
+    entropy: ((windowEntropyAvg ?? entropy)).toFixed(2),
+    entropyNorm: ((windowEntropyNormAvg ?? entropyNorm)).toFixed(2),
+    compression: ((windowCompressionAvg ?? compression)).toFixed(2),
+    windowsUsed: {
+      cv: validWindowAnalyses.filter(wa => typeof wa.analysis?.values?.cv === 'number' && Number.isFinite(wa.analysis.values.cv)).length,
+      all: validWindowAnalyses.length
+    }
+  };
+
   // Check for keyboard-only usage (suspicious for a quiz) - ! A New Metric Unknown Effect !
   const keyboardEvents = events.filter(e => e.type === 'K');
   const keyboardClicks = clickEvents.filter(e => e.method === 'keyboard');
@@ -346,6 +372,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     entropy: entropy.toFixed(2),
     entropyNorm: entropyNorm.toFixed(2),
     compression: compression.toFixed(2),
+    windowedMetrics,
     flagSum: flagSum.toFixed(1),
     flagMax: 5,
     classification,

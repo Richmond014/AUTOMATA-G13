@@ -563,12 +563,21 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     cv: '0',
     repetition: '0',
     entropy: '0',
+    entropyNorm: '0',
     compression: '0',
+    windowedMetrics: null,
     totalEvents: 0,
     totalTime: '0',
     clicks: 0,
     mouseMovements: 0,
     ...analysis
+  };
+
+  const displayedMetrics = safeAnalysis.windowedMetrics ?? {
+    cv: safeAnalysis.cv,
+    repetition: safeAnalysis.repetition,
+    entropy: safeAnalysis.entropy,
+    compression: safeAnalysis.compression
   };
 
   return (
@@ -636,16 +645,16 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                 <div style={styles.metricBox}>
                   <div style={styles.metricHeader}>
                     <span style={styles.metricLabel}>Timing Consistency</span>
-                    {parseFloat(safeAnalysis.cv) < 0.10 || parseFloat(safeAnalysis.cv) < 0.25 ? (
+                    {parseFloat(displayedMetrics.cv) < 0.10 || parseFloat(displayedMetrics.cv) < 0.25 ? (
                       <AlertTriangle size={16} style={{ color: '#EF4444' }} />
                     ) : (
                       <CheckCircle size={16} style={{ color: '#10B981' }} />
                     )}
                   </div>
-                  <div style={styles.metricValue}>{safeAnalysis.cv}</div>
-                  <div style={styles.metricStatus(parseFloat(safeAnalysis.cv) < 0.10)}>
-                    {parseFloat(safeAnalysis.cv) < 0.10 ? '⚠️ Too Consistent' : 
-                     parseFloat(safeAnalysis.cv) >= 0.25 ? '✓ Normal' : 
+                  <div style={styles.metricValue}>{displayedMetrics.cv}</div>
+                  <div style={styles.metricStatus(parseFloat(displayedMetrics.cv) < 0.10)}>
+                    {parseFloat(displayedMetrics.cv) < 0.10 ? '⚠️ Too Consistent' : 
+                     parseFloat(displayedMetrics.cv) >= 0.25 ? '✓ Normal' : 
                      '⚠️ Suspicious'}
                   </div>
                 </div>
@@ -653,31 +662,31 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                 <div style={styles.metricBox}>
                   <div style={styles.metricHeader}>
                     <span style={styles.metricLabel}>Pattern Repetition</span>
-                    {parseFloat(safeAnalysis.repetition) >= 80 ? (
+                    {parseFloat(displayedMetrics.repetition) >= 80 ? (
                       <AlertTriangle size={16} style={{ color: '#EF4444' }} />
                     ) : (
                       <CheckCircle size={16} style={{ color: '#10B981' }} />
                     )}
                   </div>
-                  <div style={styles.metricValue}>{safeAnalysis.repetition}%</div>
-                  <div style={styles.metricStatus(parseFloat(safeAnalysis.repetition) >= 80)}>
-                    {parseFloat(safeAnalysis.repetition) >= 80 ? '⚠️ High' : '✓ Normal'}
+                  <div style={styles.metricValue}>{displayedMetrics.repetition}%</div>
+                  <div style={styles.metricStatus(parseFloat(displayedMetrics.repetition) >= 80)}>
+                    {parseFloat(displayedMetrics.repetition) >= 80 ? '⚠️ High' : '✓ Normal'}
                   </div>
                 </div>
 
                 <div style={styles.metricBox}>
                   <div style={styles.metricHeader}>
                     <span style={styles.metricLabel}>Randomness</span>
-                    {parseFloat(safeAnalysis.entropy) < 1.5 ? (
+                    {parseFloat(displayedMetrics.entropy) < 1.5 ? (
                       <AlertTriangle size={16} style={{ color: '#EF4444' }} />
                     ) : (
                       <CheckCircle size={16} style={{ color: '#10B981' }} />
                     )}
                   </div>
-                  <div style={styles.metricValue}>{safeAnalysis.entropy}</div>
-                  <div style={styles.metricStatus(parseFloat(safeAnalysis.entropy) < 1.5)}>
-                    {parseFloat(safeAnalysis.entropy) < 1.5 ? '⚠️ Low' :
-                     parseFloat(safeAnalysis.entropy) < 2.0 ? '⚠️ Suspicious' :
+                  <div style={styles.metricValue}>{displayedMetrics.entropy}</div>
+                  <div style={styles.metricStatus(parseFloat(displayedMetrics.entropy) < 1.5)}>
+                    {parseFloat(displayedMetrics.entropy) < 1.5 ? '⚠️ Low' :
+                     parseFloat(displayedMetrics.entropy) < 2.0 ? '⚠️ Suspicious' :
                      '✓ Normal'}
                   </div>
                 </div>
@@ -685,16 +694,16 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                 <div style={styles.metricBox}>
                   <div style={styles.metricHeader}>
                     <span style={styles.metricLabel}>Pattern Complexity</span>
-                    {parseFloat(safeAnalysis.compression) <= 0.60 ? (
+                    {parseFloat(displayedMetrics.compression) <= 0.60 ? (
                       <AlertTriangle size={16} style={{ color: '#EF4444' }} />
                     ) : (
                       <CheckCircle size={16} style={{ color: '#10B981' }} />
                     )}
                   </div>
-                  <div style={styles.metricValue}>{safeAnalysis.compression}</div>
-                  <div style={styles.metricStatus(parseFloat(safeAnalysis.compression) <= 0.60)}>
-                    {parseFloat(safeAnalysis.compression) <= 0.60 ? '⚠️ Too Simple' :
-                     parseFloat(safeAnalysis.compression) <= 0.85 ? '⚠️ Suspicious' :
+                  <div style={styles.metricValue}>{displayedMetrics.compression}</div>
+                  <div style={styles.metricStatus(parseFloat(displayedMetrics.compression) <= 0.60)}>
+                    {parseFloat(displayedMetrics.compression) <= 0.60 ? '⚠️ Too Simple' :
+                     parseFloat(displayedMetrics.compression) <= 0.85 ? '⚠️ Suspicious' :
                      '✓ Normal'}
                   </div>
                 </div>
