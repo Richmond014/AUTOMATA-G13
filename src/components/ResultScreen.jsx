@@ -8,21 +8,17 @@ import {
   groupEventsIntoBlocks
 } from '../utils/tapeSimulation';
 
-function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome, events = [] }) {
+function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
   const CELL_MS = CELL_MS_DEFAULT;
   const CELL_METRICS = CELL_METRICS_DEFAULT;
 
-  // TM-inspired visualization aliases (readability only)
   const inputTape = events;
 
   const [currentIndex, setCurrentIndex] = useState(0); // Current event index (read head position)
   const [isPlaying, setIsPlaying] = useState(false);
-  const [writtenCellMax, setWrittenCellMax] = useState(-1);
   const tapeRef = useRef(null);
 
   const readHeadIndex = currentIndex;
-  const setReadHeadIndex = setCurrentIndex;
-  const writeHeadCellIndexMax = writtenCellMax;
 
   // Scroll to top when results page loads
   useEffect(() => {
@@ -37,29 +33,25 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     ? getCellIndexForEvent(inputTape[readHeadIndex] || inputTape[0])
     : 0;
 
+  const writeHeadCellIndexMax = currentCellIndex;
+
   const buildCellToken = (cellAnalysis) => buildCellTokenFromAnalysis(cellAnalysis, CELL_METRICS);
 
-  // Auto-play animation with adjusted speed (500ms per event)
+  // Auto-play animation
   useEffect(() => {
-    if (!isPlaying || readHeadIndex >= inputTape.length - 1) {
-      if (readHeadIndex >= inputTape.length - 1) setIsPlaying(false);
-      return;
-    }
+    if (!isPlaying || readHeadIndex >= inputTape.length - 1) return;
 
     const timer = setTimeout(() => {
-      setReadHeadIndex(prev => prev + 1);
+      setCurrentIndex((prev) => {
+        const next = prev + 1;
+        const lastIndex = inputTape.length - 1;
+        if (next >= lastIndex) setIsPlaying(false);
+        return Math.min(next, lastIndex);
+      });
     }, 1500);
 
     return () => clearTimeout(timer);
   }, [isPlaying, readHeadIndex, inputTape.length]);
-
-  // TM-inspired rule (output tape "write head"):
-  // When the read head reaches an event in cell ci, we reveal/write output tokens up to ci.
-  useEffect(() => {
-    if (!inputTape || inputTape.length === 0) return;
-    const ci = getCellIndexForEvent(inputTape[readHeadIndex]);
-    setWrittenCellMax((prev) => Math.max(prev, ci));
-  }, [readHeadIndex, inputTape.length]);
 
   // Auto-scroll to current event (only when playing)
   useEffect(() => {
@@ -98,8 +90,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   const handlePlayPause = () => {
     if (readHeadIndex >= inputTape.length - 1) {
       // If at the end, reset to beginning and start playing
-      setReadHeadIndex(0);
-      setWrittenCellMax(-1);
+      setCurrentIndex(0);
       setIsPlaying(true);
     } else {
       // Toggle play/pause
@@ -108,9 +99,8 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   };
 
   const handleReset = () => {
-    setReadHeadIndex(0);
+    setCurrentIndex(0);
     setIsPlaying(false);
-    setWrittenCellMax(-1);
   };
 
   const styles = {
@@ -544,7 +534,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     flagMax: 5,
     cv: '0',
     repetition: '0',
-    entropy: '0',
     entropyNorm: '0',
     compression: '0',
     celledMetrics: null,
@@ -558,7 +547,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   const displayedMetrics = safeAnalysis.celledMetrics ?? {
     cv: safeAnalysis.cv,
     repetition: safeAnalysis.repetition,
-    entropy: safeAnalysis.entropy,
     entropyNorm: safeAnalysis.entropyNorm,
     compression: safeAnalysis.compression
   };
@@ -634,7 +622,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       // --- Compute statuses ---
       const cvNum = parseFloat(displayedMetrics.cv);
       const repetitionNum = parseFloat(displayedMetrics.repetition);
-      const entropyNormNum = parseFloat(safeAnalysis.entropyNorm ?? displayedMetrics.entropyNorm);
+      const entropyNormNum = parseFloat(displayedMetrics.entropyNorm ?? safeAnalysis.entropyNorm);
       const compressionNum = parseFloat(displayedMetrics.compression);
 
       const cvStatus = cvNum < 0.10 ? 'danger' : cvNum < 0.25 ? 'warning' : 'normal';
@@ -890,12 +878,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                   </div>
                 )}
               </div>
-
-              {/* TM-inspired visualization note:
-                  - Input tape = recorded event log (never overwritten)
-                  - Output tape = per-cell tokens derived from analyzer (T/R/E/C)
-                  - This is not a formal TM transition function implementation
-              */}
 
               {!inputTape || inputTape.length === 0 ? (
                 <div style={styles.emptyTape}>
