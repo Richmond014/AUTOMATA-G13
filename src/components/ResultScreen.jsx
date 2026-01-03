@@ -752,7 +752,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                     </thead>
                     <tbody>
                       {safeAnalysis.windows.map((w, idx) => {
-                        const flagCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 's').length;
+                        const suspiciousCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 's').length;
                         const cautionCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 'c').length;
 
                         const isNotApplicable = w.analysis?.hasEnoughData === false;
@@ -763,17 +763,33 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                         // Use both suspicious and caution flags so label + color stay consistent.
                         let windowResultLabel = 'Human';
                         let rowColor = '#22c55e';
-
+                        
+                        // Window classification logic
                         if (isNotApplicable) {
                           windowResultLabel = NOT_INCLUDED_LABEL;
                           rowColor = '#9CA3AF';
-                        } else if (flagCount >= 2 || cautionCount >= 3) {
+                        } else {
+                          const windowSuspiciousRatio = suspiciousCount / 4;                          
+                          const windowCautionRatio = cautionCount / 4;
+
+                          if (windowSuspiciousRatio >= 0.65) {
                           windowResultLabel = 'Suspicious';
                           rowColor = '#ef4444';
-                        } else if (flagCount >= 1 || cautionCount >= 1) {
-                          windowResultLabel = 'Caution';
-                          rowColor = '#fbbf24';
-                        }
+
+                          } else if (
+                            windowSuspiciousRatio >= 0.45 ||
+                            (windowSuspiciousRatio + windowCautionRatio) >= 0.70
+                          ) {
+                            windowResultLabel = 'Suspicious';
+                            rowColor = '#ef4444';
+                          } else if (windowCautionRatio >= 0.35) {
+                            windowResultLabel = 'Caution';
+                            rowColor = '#fbbf24';
+                          } else {
+                            windowResultLabel = 'Human';
+                            rowColor = '#22c55e';
+                          }
+                        } 
                         
                         const getFlagEmoji = (flag) => {
                           if (flag === 's') return '🚨';
