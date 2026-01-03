@@ -9,6 +9,7 @@ export const useBehaviorTracking = () => {
   const isInitialized = useRef(false);
   const lastInputMethodRef = useRef('mouse');
 
+  // Record events // TAPE 1 Input Tape
   const recordEvent = (type, metadata = {}) => {
     const timestamp = Date.now();
     const newEvent = { type, timestamp, ...metadata };
@@ -63,7 +64,7 @@ export const useBehaviorTracking = () => {
     };
 
     // ============================================
-    // GLOBAL CLICK TRACKING
+    // GLOBAL CLICK TRACKING // 
     // ============================================
     const handleGlobalClick = (e) => {
       // Don't track clicks until quiz is initialized

@@ -22,7 +22,7 @@ export const calculateRepetition = (eventTypes) => {
   // repetition is not informative for bot detection in a quiz context.
   if (uniqueCount(meaningfulEvents) < 2) return 0;
   
-  if (meaningfulEvents.length < 12) return 0; // 
+  if (meaningfulEvents.length < 12) return 0; // Why 12? Need Sufficient Data 
   
   const blockSize = 4;
   const blocks = [];

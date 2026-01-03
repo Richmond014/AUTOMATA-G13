@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, RotateCcw } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, RotateCcw } from 'lucide-react';
 
 function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome, events = [] }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0); // Current event index
   const [isPlaying, setIsPlaying] = useState(false);
   const [writtenWindowMax, setWrittenWindowMax] = useState(-1);
   const tapeRef = useRef(null);
@@ -309,7 +309,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       gap: '1rem'
     },
     tapeTitle: {
-      fontSize: '1.2rem',
+      fontSize: '1.75rem',
       fontWeight: '600',
       color: '#1F2937',
       fontFamily: 'monospace'
@@ -596,8 +596,9 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
             <div style={styles.grid}>
               <div style={styles.card}>
                 <div style={styles.cardHeader}>
-                  <TrendingUp size={24} style={{ color: '#4F46E5' }} />
-                  <span>Quiz Performance</span>
+                  <span style={{ fontSize: '1.5rem' }}>
+                    Quiz Performance Summary
+                  </span>
                 </div>
                 <div style={styles.scoreDisplay}>
                   <div style={styles.scoreNumber}>
@@ -614,7 +615,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
               <div style={styles.detectionCard(borderColor)}>
                 <div style={styles.cardHeader}>
-                  <Shield size={24} style={{ color: borderColor }} />
                   <span>Detection Result</span>
                 </div>
                 <div style={styles.detectionResult}>
@@ -636,79 +636,116 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
             </div>
 
             {/* Analysis Metrics */}
-            <div style={styles.metricsCard}>
-              <div style={styles.cardHeader}>
-                <Activity size={24} style={{ color: '#4F46E5' }} />
-                <span>Analysis Metrics</span>
-              </div>
-              <div style={styles.metricsGrid}>
-                <div style={styles.metricBox}>
-                  <div style={styles.metricHeader}>
-                    <span style={styles.metricLabel}>Timing Consistency</span>
-                    {parseFloat(displayedMetrics.cv) < 0.10 || parseFloat(displayedMetrics.cv) < 0.25 ? (
-                      <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-                    ) : (
-                      <CheckCircle size={16} style={{ color: '#10B981' }} />
-                    )}
-                  </div>
-                  <div style={styles.metricValue}>{displayedMetrics.cv}</div>
-                  <div style={styles.metricStatus(parseFloat(displayedMetrics.cv) < 0.10)}>
-                    {parseFloat(displayedMetrics.cv) < 0.10 ? '⚠️ Too Consistent' : 
-                     parseFloat(displayedMetrics.cv) >= 0.25 ? '✓ Normal' : 
-                     '⚠️ Suspicious'}
-                  </div>
-                </div>
+<div style={styles.metricsCard}>
+  <div style={styles.cardHeader}>
+    <span>Analysis Metrics</span>
+  </div>
 
-                <div style={styles.metricBox}>
-                  <div style={styles.metricHeader}>
-                    <span style={styles.metricLabel}>Pattern Repetition</span>
-                    {parseFloat(displayedMetrics.repetition) >= 80 ? (
-                      <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-                    ) : (
-                      <CheckCircle size={16} style={{ color: '#10B981' }} />
-                    )}
-                  </div>
-                  <div style={styles.metricValue}>{displayedMetrics.repetition}%</div>
-                  <div style={styles.metricStatus(parseFloat(displayedMetrics.repetition) >= 80)}>
-                    {parseFloat(displayedMetrics.repetition) >= 80 ? '⚠️ High' : '✓ Normal'}
-                  </div>
-                </div>
+  <div style={styles.metricsGrid}>
+    {(() => {
+      // --- Compute statuses ---
+      const cv = parseFloat(safeAnalysis.cv);
+      const repetition = parseFloat(safeAnalysis.repetition);
+      const entropy = parseFloat(safeAnalysis.entropy);
+      const compression = parseFloat(safeAnalysis.compression);
 
-                <div style={styles.metricBox}>
-                  <div style={styles.metricHeader}>
-                    <span style={styles.metricLabel}>Randomness</span>
-                    {parseFloat(displayedMetrics.entropy) < 1.5 ? (
-                      <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-                    ) : (
-                      <CheckCircle size={16} style={{ color: '#10B981' }} />
-                    )}
-                  </div>
-                  <div style={styles.metricValue}>{displayedMetrics.entropy}</div>
-                  <div style={styles.metricStatus(parseFloat(displayedMetrics.entropy) < 1.5)}>
-                    {parseFloat(displayedMetrics.entropy) < 1.5 ? '⚠️ Low' :
-                     parseFloat(displayedMetrics.entropy) < 2.0 ? '⚠️ Suspicious' :
-                     '✓ Normal'}
-                  </div>
-                </div>
+      const cvStatus = cv < 0.10 ? 'danger' : cv < 0.25 ? 'warning' : 'normal';
+      const repetitionStatus =
+        repetition >= 80 ? 'danger' : repetition >= 60 ? 'warning' : 'normal';
+      const entropyStatus = entropy < 1.5 ? 'danger' : entropy < 2.0 ? 'warning' : 'normal';
+      const compressionStatus =
+        compression <= 0.60 ? 'danger' : compression <= 0.85 ? 'warning' : 'normal';
 
-                <div style={styles.metricBox}>
-                  <div style={styles.metricHeader}>
-                    <span style={styles.metricLabel}>Pattern Complexity</span>
-                    {parseFloat(displayedMetrics.compression) <= 0.60 ? (
-                      <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-                    ) : (
-                      <CheckCircle size={16} style={{ color: '#10B981' }} />
-                    )}
-                  </div>
-                  <div style={styles.metricValue}>{displayedMetrics.compression}</div>
-                  <div style={styles.metricStatus(parseFloat(displayedMetrics.compression) <= 0.60)}>
-                    {parseFloat(displayedMetrics.compression) <= 0.60 ? '⚠️ Too Simple' :
-                     parseFloat(displayedMetrics.compression) <= 0.85 ? '⚠️ Suspicious' :
-                     '✓ Normal'}
-                  </div>
-                </div>
-              </div>
-            </div>
+      const isBad = (status) => status !== 'normal';
+
+      // --- Helper to render each metric ---
+      const renderMetric = (
+        label,
+        value,
+        status,
+        suffix,
+        dangerText,
+        warningText,
+        normalText
+      ) => (
+        <div
+          style={{
+            ...styles.metricBox,
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderColor: isBad(status) ? '#EF4444' : '#E5E7EB',
+          }}
+        >
+          <div style={styles.metricHeader}>
+            <span style={styles.metricLabel}>{label}</span>
+            {status === 'normal' ? (
+              <CheckCircle size={16} style={{ color: '#10B981' }} />
+            ) : (
+              <AlertTriangle size={16} style={{ color: '#EF4444' }} />
+            )}
+          </div>
+          <div style={styles.metricValue}>
+            {value}
+            {suffix ? suffix : ''}
+          </div>
+          <div
+            style={{
+              ...styles.metricStatus,
+              color: status === 'normal' ? '#10B981' : '#EF4444',
+            }}
+          >
+            {status === 'danger'
+              ? dangerText
+              : status === 'warning'
+              ? warningText
+              : normalText}
+          </div>
+        </div>
+      );
+
+      return (
+        <>
+          {renderMetric(
+            'Timing Consistency',
+            cv,
+            cvStatus,
+            '',
+            'Too Consistent',
+            'Suspicious',
+            'Normal'
+          )}
+          {renderMetric(
+            'Pattern Repetition',
+            repetition,
+            repetitionStatus,
+            '%',
+            'High',
+            'Suspicious',
+            'Normal'
+          )}
+          {renderMetric(
+            'Randomness',
+            entropy,
+            entropyStatus,
+            '',
+            'Low',
+            'Suspicious',
+            'Normal'
+          )}
+          {renderMetric(
+            'Pattern Complexity',
+            compression,
+            compressionStatus,
+            '',
+            'Too Simple',
+            'Suspicious',
+            'Normal'
+          )}
+        </>
+      );
+    })()}
+  </div>
+</div>
 
             {/* Interaction Statistics */}
             <div style={styles.statsCard}>
@@ -739,7 +776,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
             {safeAnalysis.windows && safeAnalysis.windows.length > 0 && (
               <div style={styles.statsCard}>
                 <h3 style={styles.cardHeader}>
-                  <Activity size={24} style={{ color: '#4F46E5' }} />
                   <span>Window Analysis (5-Second Intervals)</span>
                 </h3>
                 <div style={{ marginBottom: '1.5rem', color: '#6B7280', fontSize: '0.875rem' }}>
@@ -752,10 +788,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       <tr style={{ borderBottom: '3px solid rgb(96, 165, 250)' }}>
                         <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Window</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Events</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>T</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>R</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>E</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>C</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Timing</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Repetition</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Entropy</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Compressibility</th>
                         <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Result</th>
                       </tr>
                     </thead>
@@ -782,12 +818,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                           const windowCautionRatio = cautionCount / 4;
 
                           if (windowSuspiciousRatio >= 0.65) {
-                          windowResultLabel = 'Suspicious';
-                          rowColor = '#ef4444';
-
-                          } else if (
-                            windowSuspiciousRatio >= 0.45 ||
-                            (windowSuspiciousRatio + windowCautionRatio) >= 0.70
+                            windowResultLabel = 'Suspicious';
+                            rowColor = '#ef4444';
+                          } else if ( // Mixed case: suspicious + caution = suspicious
+                            windowSuspiciousRatio >= 0.45 || (windowSuspiciousRatio + windowCautionRatio) >= 0.70
                           ) {
                             windowResultLabel = 'Suspicious';
                             rowColor = '#ef4444';
@@ -800,11 +834,11 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                           }
                         } 
                         
-                        const getFlagEmoji = (flag) => {
-                          if (flag === 's') return '🚨';
-                          if (flag === 'c') return '⚠️';
-                          if (flag === 'h') return '✅';
-                          return 'N/A';
+                        const getFlagEmoji = (flag, color) => {
+                            if (flag === 's') return <AlertCircle size={16} color={color || '#ef4444'} />; 
+                            if (flag === 'c') return <AlertTriangle size={16} color={color || '#fbbf24'} />; 
+                            if (flag === 'h') return <CheckCircle size={16} color={color || '#22c55e'} />; 
+                            return 'N/A'; 
                         };
                         
                         return (
@@ -816,16 +850,13 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.E)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
                             <td style={{ padding: '0.75rem' }}>
-                              <span style={{ color: rowColor, fontWeight: '600', fontSize: '1.2rem' }}>
-                                {windowResultLabel === NOT_INCLUDED_LABEL
-                                  ? NOT_INCLUDED_LABEL
-                                  : windowResultLabel === 'Suspicious'
-                                    ? '🚨 Suspicious'
-                                    : windowResultLabel === 'Caution'
-                                      ? '⚠️ Caution'
-                                      : '✅ Human'}
-                              </span>
-                            </td>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: rowColor, fontWeight: 600 }}>
+                            {windowResultLabel === 'Suspicious' && <AlertCircle size={18} />}
+                            {windowResultLabel === 'Caution' && <AlertTriangle size={18} />}
+                            {windowResultLabel === 'Human' && <CheckCircle size={18} />}
+                            {windowResultLabel}
+                            </span>
+                          </td>
                           </tr>
                         );
                       })}
@@ -838,7 +869,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
             {/* Turing Machine Tape Simulation */}
             <div style={styles.tapeCard}>
               <div style={styles.tapeHeader}>
-                <h3 style={styles.tapeTitle}>🎬 Turing Machine Tape Simulation</h3>
+                <h3 style={styles.tapeTitle}> Turing Machine Tape Simulation</h3>
                 {events && events.length > 0 && (
                   <div style={styles.controls}>
                     <button 
