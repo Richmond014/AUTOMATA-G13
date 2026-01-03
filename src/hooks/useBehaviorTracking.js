@@ -7,6 +7,7 @@ export const useBehaviorTracking = () => {
   const [events, setEvents] = useState([]);
   const quizAreaRef = useRef(null);
   const isInitialized = useRef(false);
+  const lastInputMethodRef = useRef('mouse');
 
   const recordEvent = (type, metadata = {}) => {
     const timestamp = Date.now();
@@ -23,6 +24,27 @@ export const useBehaviorTracking = () => {
     let lastMoveTime = 0;
     let lastScrollTime = 0;
     let lastClickInfo = { time: 0, x: 0, y: 0 };
+
+    const handleKeyDown = (e) => {
+      if (!isInitialized.current) return;
+      lastInputMethodRef.current = 'keyboard';
+
+      // Avoid recording modifier keys spam; keep meaningful keys only.
+      const ignoredKeys = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
+      if (!ignoredKeys.has(e.key)) {
+        recordEvent('K', {
+          action: 'keydown',
+          key: e.key,
+          code: e.code,
+          repeat: !!e.repeat
+        });
+      }
+    };
+
+    const handlePointerDown = () => {
+      if (!isInitialized.current) return;
+      lastInputMethodRef.current = 'mouse';
+    };
 
     // Mouse movement tracking
     const handleMouseMove = (e) => {
@@ -92,9 +114,12 @@ export const useBehaviorTracking = () => {
         }
         
         // Record the click event
+        // e.detail === 0 is commonly used by browsers to indicate a keyboard-triggered click.
+        const inferredMethod = e.detail === 0 ? 'keyboard' : lastInputMethodRef.current;
         recordEvent('C', { 
           x, 
           y, 
+          method: inferredMethod,
           clickType,
           element: elementType,
           text: elementText,
@@ -127,6 +152,8 @@ export const useBehaviorTracking = () => {
     };
 
     // Register all event listeners
+    document.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('click', handleGlobalClick, false);
     window.addEventListener('scroll', handleScroll);
@@ -135,6 +162,8 @@ export const useBehaviorTracking = () => {
     // Cleanup
     return () => {
       clearTimeout(initTimer);
+      document.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('click', handleGlobalClick, false);
       window.removeEventListener('scroll', handleScroll);
@@ -161,6 +190,7 @@ export const useBehaviorTracking = () => {
   const recordKeyboard = (action, metadata = {}) => {
     if (!isInitialized.current) return;
     
+    lastInputMethodRef.current = 'keyboard';
     recordEvent('K', { action, ...metadata });
   };
 

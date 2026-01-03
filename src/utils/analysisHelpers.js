@@ -1,8 +1,7 @@
 // src/utils/analysisHelpers.js
-// Analysis and calculation functions - IMPROVED & FAIR
-
 const uniqueCount = (arr) => new Set(arr).size;
 
+// Timing CV calculation = Periodicity measure
 export const calculateCV = (intervals) => {
   if (intervals.length < 2) return 0;
   const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
@@ -12,6 +11,7 @@ export const calculateCV = (intervals) => {
 };
 
 // FIX #4: Focus on meaningful actions, not mouse spam
+// Calculate repetition of action patterns = Repititiveness measure
 export const calculateRepetition = (eventTypes) => {
   // Filter out mouse movements - they naturally cluster
   const meaningfulEvents = eventTypes.filter(t => 
@@ -22,7 +22,7 @@ export const calculateRepetition = (eventTypes) => {
   // repetition is not informative for bot detection in a quiz context.
   if (uniqueCount(meaningfulEvents) < 2) return 0;
   
-  if (meaningfulEvents.length < 12) return 0;
+  if (meaningfulEvents.length < 12) return 0; // 
   
   const blockSize = 4;
   const blocks = [];
@@ -47,6 +47,7 @@ export const calculateRepetition = (eventTypes) => {
   return matches / blocks.length;
 };
 
+// Entropy calculation = Unpredictability measure
 export const calculateEntropy = (eventTypes) => {
   const freq = {};
   eventTypes.forEach(t => freq[t] = (freq[t] || 0) + 1);
@@ -81,6 +82,7 @@ export const calculateNormalizedEntropy = (
   return Math.max(0, Math.min(1, Hnorm));
 };
 
+// Complexity via compression = Pattern complexity measure
 // FIX #3: Focus on meaningful events, ignore mouse spam
 export const calculateCompression = (eventTypes) => {
   // Only analyze clicks, hovers, scrolls - ignore mouse movements
@@ -88,7 +90,7 @@ export const calculateCompression = (eventTypes) => {
     t === 'C' || t === 'H' || t === 'S'
   );
   
-  if (meaningfulEvents.length < 4) return 1.0; // Not enough data, assume normal
+  if (meaningfulEvents.length < 4) return 1.0; // Not enough data, (assume normal)
 
   // If the sequence is effectively one-symbol (e.g., all clicks), compressibility is expected
   // and not a reliable automation signal for a quiz.
@@ -159,9 +161,14 @@ export const analyzeWindow = (windowEvents) => {
   }
   
   const eventTypes = windowEvents.map(e => e.type);
+
+  // Entropy should not be dominated by mouse-move spam.
+  // Compute entropy on non-mouse events and normalize by the observed symbol count.
+  const entropyTypes = eventTypes.filter(t => t !== 'M');
+
   const repetition = calculateRepetition(eventTypes);
-  const entropy = calculateEntropy(eventTypes);
-  const entropyNorm = calculateNormalizedEntropy(eventTypes);
+  const entropy = calculateEntropy(entropyTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
   const compression = calculateCompression(eventTypes);
 
   // Timing CV requires at least 2 intervals (>= 3 clicks). With only 2 clicks,
@@ -178,7 +185,7 @@ export const analyzeWindow = (windowEvents) => {
   }
 
   // Entropy is only meaningful when there's some diversity in observed event symbols.
-  const hasEntropyDiversity = uniqueCount(eventTypes) >= 2;
+  const hasEntropyDiversity = uniqueCount(entropyTypes) >= 2;
   
   // Return symbolic flags: s=suspicious, c=caution, h=human, n=not enough data
   return {
@@ -247,15 +254,16 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   }
 
   const eventTypes = events.map(e => e.type);
+  const entropyTypes = eventTypes.filter(t => t !== 'M');
   const cv = calculateCV(intervals);
   const repetition = calculateRepetition(eventTypes);
-  const entropy = calculateEntropy(eventTypes);
-  const entropyNorm = calculateNormalizedEntropy(eventTypes);
+  const entropy = calculateEntropy(entropyTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
   const compression = calculateCompression(eventTypes);
 
-  // Check for keyboard-only usage (suspicious for a quiz)
-  const keyboardEvents = events.filter(e => e.type === 'TAB_NAV' || e.type === 'KEY_SELECT');
-  const keyboardClicks = clickEvents.filter(e => e.metadata && e.metadata.method === 'keyboard');
+  // Check for keyboard-only usage (suspicious for a quiz) - ! A New Metric Unknown Effect !
+  const keyboardEvents = events.filter(e => e.type === 'K');
+  const keyboardClicks = clickEvents.filter(e => e.method === 'keyboard');
   const totalClicks = clickEvents.length;
   const keyboardRatio = totalClicks > 0 ? keyboardClicks.length / totalClicks : 0;
   
@@ -268,7 +276,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const timingFlag = cv < 0.08 ? 1 : (cv < 0.20 ? 0.5 : 0);
   const repetitionFlag = repetition >= 0.75 ? 1 : (repetition >= 0.60 ? 0.5 : 0);
   // Normalized entropy thresholds (mapped from previous raw thresholds)
-  const entropyFlag = uniqueCount(eventTypes) < 2 ? 0 : (entropyNorm < 0.40 ? 1 : (entropyNorm < 0.60 ? 0.5 : 0));
+  const entropyFlag = uniqueCount(entropyTypes) < 2 ? 0 : (entropyNorm < 0.40 ? 1 : (entropyNorm < 0.60 ? 0.5 : 0));
   const compressionFlag = compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0);
   const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
@@ -277,7 +285,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   let suspiciousRatio, cautionRatio;
   
   if (useWindowedAnalysis && validWindows > 0) {
-    suspiciousRatio = totalSuspicious / (validWindows * 4);
+    suspiciousRatio = totalSuspicious / (validWindows * 4); // Why multiplied by 4? Because we have 4 metrics per window (T, R, E, C)
     cautionRatio = totalCaution / (validWindows * 4);
   } else {
     // Fallback: convert overall flags to ratios
@@ -292,14 +300,12 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const avgTimePerQuestion = totalTimeMs / questions.length / 1000;
   
   // Stricter "too fast" threshold to avoid flagging legitimately fast humans
-  const tooFast = avgTimePerQuestion < 1.0;
+  const tooFast = avgTimePerQuestion < 1.0; // Need Related Literature to Support This Value
   const perfectScore = score === questions.length;
   const suspiciousCombo = tooFast && perfectScore;
 
   // DFA Classification (enhanced with windowed analysis)
   // NOTE: This project uses a strict 3-state DFA: q_human / q_caution / q_suspicious
-  // UI requirement: Detection Result must show only Human / Caution / Suspicious,
-  // and the description must not include sub-labels like "HIGH SUSPICION".
   let classification, color, suspicionLevel, dfaState;
   
   // More lenient thresholds for realistic human behavior
@@ -307,7 +313,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   if (suspiciousRatio >= 0.65 || flagSum >= 3.5 || suspiciousCombo) {
     classification = "Behavior matches multiple automation-like patterns. Review recommended.";
     color = "#ef4444";
-    suspicionLevel = "Suspicious";
+    suspicionLevel = "Suspicious"; // What if we had "Bot" level?
     dfaState = "q_suspicious";
   } 
   // Moderate suspicion also maps to q_suspicious
