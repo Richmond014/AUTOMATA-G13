@@ -1,95 +1,75 @@
 import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, AlertCircle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, RotateCcw } from 'lucide-react';
+import {
+  CELL_METRICS_DEFAULT,
+  CELL_MS_DEFAULT,
+  buildCellToken as buildCellTokenFromAnalysis,
+  getCellIndexForEvent as getCellIndexForEventFromTape,
+  groupEventsIntoBlocks
+} from '../utils/tapeSimulation';
 
 function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome, events = [] }) {
-  const [currentIndex, setCurrentIndex] = useState(0); // Current event index
+  const CELL_MS = CELL_MS_DEFAULT;
+  const CELL_METRICS = CELL_METRICS_DEFAULT;
+
+  // TM-inspired visualization aliases (readability only)
+  const inputTape = events;
+
+  const [currentIndex, setCurrentIndex] = useState(0); // Current event index (read head position)
   const [isPlaying, setIsPlaying] = useState(false);
-  const [writtenWindowMax, setWrittenWindowMax] = useState(-1);
+  const [writtenCellMax, setWrittenCellMax] = useState(-1);
   const tapeRef = useRef(null);
+
+  const readHeadIndex = currentIndex;
+  const setReadHeadIndex = setCurrentIndex;
+  const writeHeadCellIndexMax = writtenCellMax;
 
   // Scroll to top when results page loads
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  // Group events into blocks for tape visualization
-  const groupEvents = (events) => {
-    if (!events || events.length === 0) return [];
-    
-    const blocks = [];
-    let currentBlock = [];
-    let lastTimestamp = events[0]?.timestamp || 0;
+  const blocks = groupEventsIntoBlocks(inputTape);
 
-    events.forEach((event) => {
-      if (event.timestamp - lastTimestamp > 2000 || currentBlock.length >= 7) {
-        if (currentBlock.length > 0) {
-          blocks.push([...currentBlock]);
-          currentBlock = [];
-        }
-      }
-      currentBlock.push(event);
-      lastTimestamp = event.timestamp;
-    });
+  const getCellIndexForEvent = (event) => getCellIndexForEventFromTape(event, inputTape, CELL_MS);
 
-    if (currentBlock.length > 0) {
-      blocks.push(currentBlock);
-    }
-
-    return blocks;
-  };
-
-  const blocks = groupEvents(events);
-
-  const getWindowIndexForEvent = (event) => {
-    if (!event || !events || events.length === 0) return 0;
-    const t0 = events[0]?.timestamp ?? 0;
-    const dt = Math.max(0, (event.timestamp ?? t0) - t0);
-    return Math.floor(dt / 5000);
-  };
-
-  const currentWindowIndex = events && events.length > 0
-    ? getWindowIndexForEvent(events[currentIndex] || events[0])
+  const currentCellIndex = inputTape && inputTape.length > 0
+    ? getCellIndexForEvent(inputTape[readHeadIndex] || inputTape[0])
     : 0;
 
-  const buildWindowToken = (windowAnalysis) => {
-    const analysisObj = windowAnalysis?.analysis || windowAnalysis || {};
-    const flagToToken = (metric, flag) => {
-      const suffix = flag === 's' ? 's' : flag === 'c' ? 'c' : flag === 'h' ? 'h' : 'n';
-      return `${metric}_${suffix}`;
-    };
-    return ['T', 'R', 'E', 'C'].map((m) => flagToToken(m, analysisObj[m])).join(' | ');
-  };
+  const buildCellToken = (cellAnalysis) => buildCellTokenFromAnalysis(cellAnalysis, CELL_METRICS);
 
   // Auto-play animation with adjusted speed (500ms per event)
   useEffect(() => {
-    if (!isPlaying || currentIndex >= events.length - 1) {
-      if (currentIndex >= events.length - 1) setIsPlaying(false);
+    if (!isPlaying || readHeadIndex >= inputTape.length - 1) {
+      if (readHeadIndex >= inputTape.length - 1) setIsPlaying(false);
       return;
     }
 
     const timer = setTimeout(() => {
-      setCurrentIndex(prev => prev + 1);
+      setReadHeadIndex(prev => prev + 1);
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [isPlaying, currentIndex, events.length]);
+  }, [isPlaying, readHeadIndex, inputTape.length]);
 
-  // Write to the output tape as the input head advances (per 5-second window)
+  // TM-inspired rule (output tape "write head"):
+  // When the read head reaches an event in cell ci, we reveal/write output tokens up to ci.
   useEffect(() => {
-    if (!events || events.length === 0) return;
-    const wi = getWindowIndexForEvent(events[currentIndex]);
-    setWrittenWindowMax((prev) => Math.max(prev, wi));
-  }, [currentIndex, events.length]);
+    if (!inputTape || inputTape.length === 0) return;
+    const ci = getCellIndexForEvent(inputTape[readHeadIndex]);
+    setWrittenCellMax((prev) => Math.max(prev, ci));
+  }, [readHeadIndex, inputTape.length]);
 
   // Auto-scroll to current event (only when playing)
   useEffect(() => {
     if (tapeRef.current && isPlaying) {
-      const currentCell = tapeRef.current.querySelector(`[data-index="${currentIndex}"]`);
+      const currentCell = tapeRef.current.querySelector(`[data-index="${readHeadIndex}"]`);
       if (currentCell) {
         currentCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       }
     }
-  }, [currentIndex, isPlaying]);
+  }, [readHeadIndex, isPlaying]);
 
   const formatEventType = (type) => {
     const types = {
@@ -116,10 +96,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   };
 
   const handlePlayPause = () => {
-    if (currentIndex >= events.length - 1) {
+    if (readHeadIndex >= inputTape.length - 1) {
       // If at the end, reset to beginning and start playing
-      setCurrentIndex(0);
-      setWrittenWindowMax(-1);
+      setReadHeadIndex(0);
+      setWrittenCellMax(-1);
       setIsPlaying(true);
     } else {
       // Toggle play/pause
@@ -128,9 +108,9 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   };
 
   const handleReset = () => {
-    setCurrentIndex(0);
+    setReadHeadIndex(0);
     setIsPlaying(false);
-    setWrittenWindowMax(-1);
+    setWrittenCellMax(-1);
   };
 
   const styles = {
@@ -244,7 +224,9 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
       background: '#F9FAFB',
       padding: '1.5rem',
       borderRadius: '0.75rem',
-      border: '1px solid #E5E7EB'
+      borderWidth: '1px',
+      borderStyle: 'solid',
+      borderColor: '#E5E7EB'
     },
     metricHeader: {
       display: 'flex',
@@ -565,7 +547,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     entropy: '0',
     entropyNorm: '0',
     compression: '0',
-    windowedMetrics: null,
+    celledMetrics: null,
     totalEvents: 0,
     totalTime: '0',
     clicks: 0,
@@ -573,12 +555,18 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
     ...analysis
   };
 
-  const displayedMetrics = safeAnalysis.windowedMetrics ?? {
+  const displayedMetrics = safeAnalysis.celledMetrics ?? {
     cv: safeAnalysis.cv,
     repetition: safeAnalysis.repetition,
     entropy: safeAnalysis.entropy,
+    entropyNorm: safeAnalysis.entropyNorm,
     compression: safeAnalysis.compression
   };
+
+  const analysisCells = safeAnalysis.cells ?? [];
+  const analysisCellStats = safeAnalysis.cellStats;
+
+  const outputTape = analysisCells;
 
   return (
     <div style={styles.container}>
@@ -644,17 +632,17 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
   <div style={styles.metricsGrid}>
     {(() => {
       // --- Compute statuses ---
-      const cv = parseFloat(safeAnalysis.cv);
-      const repetition = parseFloat(safeAnalysis.repetition);
-      const entropy = parseFloat(safeAnalysis.entropy);
-      const compression = parseFloat(safeAnalysis.compression);
+      const cvNum = parseFloat(displayedMetrics.cv);
+      const repetitionNum = parseFloat(displayedMetrics.repetition);
+      const entropyNormNum = parseFloat(safeAnalysis.entropyNorm ?? displayedMetrics.entropyNorm);
+      const compressionNum = parseFloat(displayedMetrics.compression);
 
-      const cvStatus = cv < 0.10 ? 'danger' : cv < 0.25 ? 'warning' : 'normal';
+      const cvStatus = cvNum < 0.10 ? 'danger' : cvNum < 0.25 ? 'warning' : 'normal';
       const repetitionStatus =
-        repetition >= 80 ? 'danger' : repetition >= 60 ? 'warning' : 'normal';
-      const entropyStatus = entropy < 1.5 ? 'danger' : entropy < 2.0 ? 'warning' : 'normal';
+        repetitionNum >= 80 ? 'danger' : repetitionNum >= 60 ? 'warning' : 'normal';
+      const entropyStatus = entropyNormNum < 0.4 ? 'danger' : entropyNormNum < 0.6 ? 'warning' : 'normal';
       const compressionStatus =
-        compression <= 0.60 ? 'danger' : compression <= 0.85 ? 'warning' : 'normal';
+        compressionNum <= 0.60 ? 'danger' : compressionNum <= 0.85 ? 'warning' : 'normal';
 
       const isBad = (status) => status !== 'normal';
 
@@ -671,8 +659,6 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
         <div
           style={{
             ...styles.metricBox,
-            borderWidth: '1px',
-            borderStyle: 'solid',
             borderColor: isBad(status) ? '#EF4444' : '#E5E7EB',
           }}
         >
@@ -707,7 +693,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
         <>
           {renderMetric(
             'Timing Consistency',
-            cv,
+            displayedMetrics.cv,
             cvStatus,
             '',
             'Too Consistent',
@@ -716,7 +702,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
           )}
           {renderMetric(
             'Pattern Repetition',
-            repetition,
+            displayedMetrics.repetition,
             repetitionStatus,
             '%',
             'High',
@@ -725,7 +711,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
           )}
           {renderMetric(
             'Randomness',
-            entropy,
+            Number.isFinite(entropyNormNum) ? entropyNormNum.toFixed(2) : '—',
             entropyStatus,
             '',
             'Low',
@@ -734,7 +720,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
           )}
           {renderMetric(
             'Pattern Complexity',
-            compression,
+            displayedMetrics.compression,
             compressionStatus,
             '',
             'Too Simple',
@@ -772,21 +758,21 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
               </div>
             </div>
 
-            {/* Windowed Analysis Section */}
-            {safeAnalysis.windows && safeAnalysis.windows.length > 0 && (
+            {/* Cell Analysis Section */}
+            {analysisCells && analysisCells.length > 0 && (
               <div style={styles.statsCard}>
                 <h3 style={styles.cardHeader}>
-                  <span>Window Analysis (5-Second Intervals)</span>
+                  <span>Cell Analysis (5-Second Intervals)</span>
                 </h3>
                 <div style={{ marginBottom: '1.5rem', color: '#6B7280', fontSize: '0.875rem' }}>
-                  Analyzed {safeAnalysis.windowStats.totalWindows} windows. 
+                  Analyzed {analysisCellStats?.totalCells} cells. 
                   DFA State: <strong style={{ color: borderColor }}>{safeAnalysis.dfaState}</strong>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                     <thead>
                       <tr style={{ borderBottom: '3px solid rgb(96, 165, 250)' }}>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Window</th>
+                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Cell</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Events</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Timing</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Repetition</th>
@@ -796,7 +782,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       </tr>
                     </thead>
                     <tbody>
-                      {safeAnalysis.windows.map((w, idx) => {
+                      {analysisCells.map((w, idx) => {
                         const suspiciousCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 's').length;
                         const cautionCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 'c').length;
 
@@ -804,32 +790,32 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
                         const NOT_INCLUDED_LABEL = 'Not included';
 
-                        // 3-level window result: Human / Caution / Suspicious
+                        // 3-level cell result: Human / Caution / Suspicious
                         // Use both suspicious and caution flags so label + color stay consistent.
-                        let windowResultLabel = 'Human';
+                        let cellResultLabel = 'Human';
                         let rowColor = '#22c55e';
                         
-                        // Window classification logic
+                        // Cell classification logic
                         if (isNotApplicable) {
-                          windowResultLabel = NOT_INCLUDED_LABEL;
+                          cellResultLabel = NOT_INCLUDED_LABEL;
                           rowColor = '#9CA3AF';
                         } else {
-                          const windowSuspiciousRatio = suspiciousCount / 4;                          
-                          const windowCautionRatio = cautionCount / 4;
+                          const cellSuspiciousRatio = suspiciousCount / 4;                          
+                          const cellCautionRatio = cautionCount / 4;
 
-                          if (windowSuspiciousRatio >= 0.65) {
-                            windowResultLabel = 'Suspicious';
+                          if (cellSuspiciousRatio >= 0.65) {
+                            cellResultLabel = 'Suspicious';
                             rowColor = '#ef4444';
                           } else if ( // Mixed case: suspicious + caution = suspicious
-                            windowSuspiciousRatio >= 0.45 || (windowSuspiciousRatio + windowCautionRatio) >= 0.70
+                            cellSuspiciousRatio >= 0.45 || (cellSuspiciousRatio + cellCautionRatio) >= 0.70
                           ) {
-                            windowResultLabel = 'Suspicious';
+                            cellResultLabel = 'Suspicious';
                             rowColor = '#ef4444';
-                          } else if (windowCautionRatio >= 0.35) {
-                            windowResultLabel = 'Caution';
+                          } else if (cellCautionRatio >= 0.35) {
+                            cellResultLabel = 'Caution';
                             rowColor = '#fbbf24';
                           } else {
-                            windowResultLabel = 'Human';
+                            cellResultLabel = 'Human';
                             rowColor = '#22c55e';
                           }
                         } 
@@ -843,7 +829,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                         
                         return (
                           <tr key={idx} style={{ borderBottom: '1px solid rgb(229, 231, 235)' }}>
-                            <td style={{ padding: '0.75rem', color: 'black' }}>{w.window.start}s - {w.window.end}s</td>
+                            <td style={{ padding: '0.75rem', color: 'black' }}>C{idx + 1}: {w.cell?.start}s - {w.cell?.end}s</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{w.eventCount}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.T)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.R)}</td>
@@ -851,10 +837,10 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
                             <td style={{ padding: '0.75rem' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: rowColor, fontWeight: 600 }}>
-                            {windowResultLabel === 'Suspicious' && <AlertCircle size={18} />}
-                            {windowResultLabel === 'Caution' && <AlertTriangle size={18} />}
-                            {windowResultLabel === 'Human' && <CheckCircle size={18} />}
-                            {windowResultLabel}
+                            {cellResultLabel === 'Suspicious' && <AlertCircle size={18} />}
+                            {cellResultLabel === 'Caution' && <AlertTriangle size={18} />}
+                            {cellResultLabel === 'Human' && <CheckCircle size={18} />}
+                            {cellResultLabel}
                             </span>
                           </td>
                           </tr>
@@ -870,7 +856,7 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
             <div style={styles.tapeCard}>
               <div style={styles.tapeHeader}>
                 <h3 style={styles.tapeTitle}> Turing Machine Tape Simulation</h3>
-                {events && events.length > 0 && (
+                {inputTape && inputTape.length > 0 && (
                   <div style={styles.controls}>
                     <button 
                       onClick={handlePlayPause} 
@@ -899,13 +885,19 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                       <span>Reset</span>
                     </button>
                     <div style={styles.counter}>
-                      Event {currentIndex + 1} / {events.length}
+                      Event {readHeadIndex + 1} / {inputTape.length}
                     </div>
                   </div>
                 )}
               </div>
 
-              {!events || events.length === 0 ? (
+              {/* TM-inspired visualization note:
+                  - Input tape = recorded event log (never overwritten)
+                  - Output tape = per-cell tokens derived from analyzer (T/R/E/C)
+                  - This is not a formal TM transition function implementation
+              */}
+
+              {!inputTape || inputTape.length === 0 ? (
                 <div style={styles.emptyTape}>
                   <p>No events recorded during the quiz.</p>
                 </div>
@@ -920,11 +912,11 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
                   <div ref={tapeRef} style={styles.tapeContainer}>
                     <div style={styles.tape}>
-                      {events.map((event, idx) => {
-                        const isCurrent = idx === currentIndex;
-                        const isPast = idx < currentIndex;
+                      {inputTape.map((event, idx) => {
+                        const isCurrent = idx === readHeadIndex;
+                        const isPast = idx < readHeadIndex;
                         const relativeTime = idx > 0 
-                          ? ((event.timestamp - events[0].timestamp) / 1000).toFixed(1) 
+                          ? ((event.timestamp - inputTape[0].timestamp) / 1000).toFixed(1) 
                           : '0.0';
 
                         return (
@@ -973,8 +965,8 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
                     </div>
                   </div>
 
-                  {/* Output tape: writes per-window (5s) tokens as the head advances */}
-                  {safeAnalysis.windows && safeAnalysis.windows.length > 0 && (
+                  {/* Output tape: writes per-cell (5s) tokens as the head advances */}
+                  {outputTape.length > 0 && (
                     <>
                       <div style={styles.headContainer}>
                         <div style={styles.head}>
@@ -985,23 +977,23 @@ function ResultScreen({ analysis = {}, startTime, endTime, onQuizAgain, onGoHome
 
                       <div style={styles.outputTapeContainer}>
                         <div style={styles.outputTape}>
-                          {safeAnalysis.windows.map((w, wIdx) => {
-                            const isCurrentWindow = wIdx === currentWindowIndex;
-                            const isWritten = wIdx <= writtenWindowMax;
-                            const token = isWritten ? buildWindowToken(w.analysis) : '…';
+                          {outputTape.map((w, wIdx) => {
+                            const isCurrentCell = wIdx === currentCellIndex;
+                            const isWritten = wIdx <= writeHeadCellIndexMax;
+                            const token = isWritten ? buildCellToken(w.analysis) : '…';
 
                             return (
                               <div
                                 key={wIdx}
                                 style={{
                                   ...styles.outputCell,
-                                  ...(isCurrentWindow ? styles.outputCellCurrent : {}),
+                                  ...(isCurrentCell ? styles.outputCellCurrent : {}),
                                   ...(!isWritten ? styles.outputCellUnwritten : {})
                                 }}
                               >
                                 <div style={styles.outputCellHeader}>
-                                  <span>{w.window?.start}s - {w.window?.end}s</span>
-                                  <span>W{wIdx + 1}</span>
+                                  <span>{w.cell?.start}s - {w.cell?.end}s</span>
+                                  <span>C{wIdx + 1}</span>
                                 </div>
                                 <div style={styles.outputToken}>{token}</div>
                               </div>

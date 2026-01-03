@@ -105,49 +105,50 @@ export const calculateCompression = (eventTypes) => {
   return compressed.length / original.length;
 };
 
-// NEW: Partition events into 5-second windows
-export const partitionIntoWindows = (events, windowSizeMs = 5000) => {
+// NEW: Partition events into fixed-duration cells (5s by default)
+export const partitionIntoCells = (events, cellSizeMs = 5000) => {
   if (events.length === 0) return [];
   
-  const windows = [];
+  const cells = [];
   const startTime = events[0].timestamp;
-  let currentWindow = [];
-  let currentWindowStart = startTime;
+  let currentCell = [];
+  let currentCellStart = startTime;
   
   events.forEach(event => {
-    const timeInCurrentWindow = event.timestamp - currentWindowStart;
+    const timeInCurrentCell = event.timestamp - currentCellStart;
     
-    if (timeInCurrentWindow >= windowSizeMs) {
-      // Save current window and start new one
-      if (currentWindow.length > 0) {
-        windows.push({
-          startTime: currentWindowStart,
-          endTime: currentWindowStart + windowSizeMs,
-          events: currentWindow
+    if (timeInCurrentCell >= cellSizeMs) {
+      // Save current cell and start new one
+      if (currentCell.length > 0) {
+        cells.push({
+          startTime: currentCellStart,
+          endTime: currentCellStart + cellSizeMs,
+          events: currentCell
         });
       }
-      currentWindow = [event];
-      currentWindowStart = Math.floor(event.timestamp / windowSizeMs) * windowSizeMs;
+      currentCell = [event];
+      currentCellStart = Math.floor(event.timestamp / cellSizeMs) * cellSizeMs;
     } else {
-      currentWindow.push(event);
+      currentCell.push(event);
     }
   });
   
-  // Add last window
-  if (currentWindow.length > 0) {
-    windows.push({
-      startTime: currentWindowStart,
-      endTime: currentWindowStart + windowSizeMs,
-      events: currentWindow
+  // Add last cell
+  if (currentCell.length > 0) {
+    cells.push({
+      startTime: currentCellStart,
+      endTime: currentCellStart + cellSizeMs,
+      events: currentCell
     });
   }
   
-  return windows;
+  return cells;
 };
 
-// Analyze single window and return flags
-export const analyzeWindow = (windowEvents) => {
-  const clickEvents = windowEvents.filter(e => e.type === "C");
+
+// Analyze single cell and return flags
+export const analyzeCell = (cellEvents) => {
+  const clickEvents = cellEvents.filter(e => e.type === "C");
   
   // Need at least 2 clicks for timing analysis
   if (clickEvents.length < 2) {
@@ -160,7 +161,7 @@ export const analyzeWindow = (windowEvents) => {
     };
   }
   
-  const eventTypes = windowEvents.map(e => e.type);
+  const eventTypes = cellEvents.map(e => e.type);
 
   // Entropy should not be dominated by mouse-move spam.
   // Compute entropy on non-mouse events and normalize by the observed symbol count.
@@ -199,6 +200,7 @@ export const analyzeWindow = (windowEvents) => {
   };
 };
 
+
 export const analyzeQuizBehavior = (score, events, questions, startTimeValue) => {
   // FIX #2: Check for minimum CLICK events, not just total events
   const clickEvents = events.filter(e => e.type === "C");
@@ -214,27 +216,31 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     };
   }
 
-  //  Partition into 5-second windows and analyze each
-  const windows = partitionIntoWindows(events, 5000);
-  const windowAnalyses = windows.map((window, idx) => ({
-    window: {
-      start: (idx * 5).toFixed(1),  
-      end: ((idx + 1) * 5).toFixed(1)  
-    },
-    eventCount: window.events.length,
-    analysis: analyzeWindow(window.events)
-  }));
+  // Partition into 5-second cells and analyze each
+  const cells = partitionIntoCells(events, 5000);
+  const cellAnalyses = cells.map((cell, idx) => {
+    const cellMeta = {
+      start: (idx * 5).toFixed(1),
+      end: ((idx + 1) * 5).toFixed(1)
+    };
+
+    return {
+      cell: cellMeta,
+      eventCount: cell.events.length,
+      analysis: analyzeCell(cell.events)
+    };
+  });
   
-  // Count total flags across all windows (DFA state accumulation)
-  // Only count windows with enough data
+  // Count total flags across all cells (DFA state accumulation)
+  // Only count cells with enough data
   let totalSuspicious = 0;
   let totalCaution = 0;
   let totalHuman = 0;
-  let validWindows = 0;
+  let validCells = 0;
   
-  windowAnalyses.forEach(wa => {
+  cellAnalyses.forEach(wa => {
     if (wa.analysis.hasEnoughData) {
-      validWindows++;
+      validCells++;
       ['T', 'R', 'E', 'C'].forEach(metric => {
         if (wa.analysis[metric] === 's') totalSuspicious++;
         else if (wa.analysis[metric] === 'c') totalCaution++;
@@ -244,8 +250,8 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     }
   });
 
-  // If less than 2 valid windows, use overall metrics instead
-  const useWindowedAnalysis = validWindows >= 2;
+  // If less than 2 valid cells, use overall metrics instead
+  const useCellAnalysis = validCells >= 2;
 
   // Calculate overall metrics (for backward compatibility)
   const intervals = [];
@@ -261,29 +267,29 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
   const compression = calculateCompression(eventTypes);
 
-  // Window-aggregated metrics (match Analysis Metrics UI to 5s windowing)
-  const validWindowAnalyses = windowAnalyses.filter(wa => wa.analysis?.hasEnoughData);
+  // Cell-aggregated metrics (match Analysis Metrics UI to 5s cells)
+  const validCellAnalyses = cellAnalyses.filter(wa => wa.analysis?.hasEnoughData);
   const avgNumber = (values) => {
     const nums = values.filter(v => typeof v === 'number' && Number.isFinite(v));
     if (nums.length === 0) return null;
     return nums.reduce((a, b) => a + b, 0) / nums.length;
   };
 
-  const windowCvAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.cv));
-  const windowRepetitionAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.repetition));
-  const windowEntropyAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.entropy));
-  const windowEntropyNormAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.entropyNorm));
-  const windowCompressionAvg = avgNumber(validWindowAnalyses.map(wa => wa.analysis?.values?.compression));
+  const cellCvAvg = avgNumber(validCellAnalyses.map(wa => wa.analysis?.values?.cv));
+  const cellRepetitionAvg = avgNumber(validCellAnalyses.map(wa => wa.analysis?.values?.repetition));
+  const cellEntropyAvg = avgNumber(validCellAnalyses.map(wa => wa.analysis?.values?.entropy));
+  const cellEntropyNormAvg = avgNumber(validCellAnalyses.map(wa => wa.analysis?.values?.entropyNorm));
+  const cellCompressionAvg = avgNumber(validCellAnalyses.map(wa => wa.analysis?.values?.compression));
 
-  const windowedMetrics = {
-    cv: ((windowCvAvg ?? cv)).toFixed(3),
-    repetition: (((windowRepetitionAvg ?? repetition) * 100)).toFixed(1),
-    entropy: ((windowEntropyAvg ?? entropy)).toFixed(2),
-    entropyNorm: ((windowEntropyNormAvg ?? entropyNorm)).toFixed(2),
-    compression: ((windowCompressionAvg ?? compression)).toFixed(2),
-    windowsUsed: {
-      cv: validWindowAnalyses.filter(wa => typeof wa.analysis?.values?.cv === 'number' && Number.isFinite(wa.analysis.values.cv)).length,
-      all: validWindowAnalyses.length
+  const celledMetrics = {
+    cv: ((cellCvAvg ?? cv)).toFixed(3),
+    repetition: (((cellRepetitionAvg ?? repetition) * 100)).toFixed(1),
+    entropy: ((cellEntropyAvg ?? entropy)).toFixed(2),
+    entropyNorm: ((cellEntropyNormAvg ?? entropyNorm)).toFixed(2),
+    compression: ((cellCompressionAvg ?? compression)).toFixed(2),
+    cellsUsed: {
+      cv: validCellAnalyses.filter(wa => typeof wa.analysis?.values?.cv === 'number' && Number.isFinite(wa.analysis.values.cv)).length,
+      all: validCellAnalyses.length
     }
   };
 
@@ -306,13 +312,13 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const compressionFlag = compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0);
   const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
-  // DFA State Machine: Determine final state based on window analyses
-  // Use windowed analysis if we have enough windows, otherwise fall back to overall metrics
+  // DFA State Machine: Determine final state based on cell analyses
+  // Use cell analysis if we have enough cells, otherwise fall back to overall metrics
   let suspiciousRatio, cautionRatio;
   
-  if (useWindowedAnalysis && validWindows > 0) {
-    suspiciousRatio = totalSuspicious / (validWindows * 4); // Why multiplied by 4? Because we have 4 metrics per window (T, R, E, C)
-    cautionRatio = totalCaution / (validWindows * 4);
+  if (useCellAnalysis && validCells > 0) {
+    suspiciousRatio = totalSuspicious / (validCells * 4); // 4 metrics per cell (T, R, E, C)
+    cautionRatio = totalCaution / (validCells * 4);
   } else {
     // Fallback: convert overall flags to ratios
     // flagSum includes 5 possible evidence sources (T/R/E/C + keyboard)
@@ -372,7 +378,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     entropy: entropy.toFixed(2),
     entropyNorm: entropyNorm.toFixed(2),
     compression: compression.toFixed(2),
-    windowedMetrics,
+    celledMetrics,
     flagSum: flagSum.toFixed(1),
     flagMax: 5,
     classification,
@@ -397,11 +403,11 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     entropyFlag,
     compressionFlag,
     keyboardOnlyFlag,
-    // NEW: Windowed analysis data
-    windows: windowAnalyses,
-    windowStats: {
-      totalWindows: windows.length,
-      validWindows,
+    // NEW: Cell analysis data
+    cells: cellAnalyses,
+    cellStats: {
+      totalCells: cells.length,
+      validCells,
       suspiciousRatio: (suspiciousRatio * 100).toFixed(1),
       cautionRatio: (cautionRatio * 100).toFixed(1),
       humanRatio: ((1 - suspiciousRatio - cautionRatio) * 100).toFixed(1)
