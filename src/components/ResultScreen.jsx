@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertTriangle, AlertCircle, CheckCircle, Shield, TrendingUp, Activity, Play, Pause, RotateCcw } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle, Play, Pause, RotateCcw } from 'lucide-react';
 import {
   CELL_METRICS_DEFAULT,
   CELL_MS_DEFAULT,
@@ -20,7 +20,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
 
   const readHeadIndex = currentIndex;
 
-  // Scroll to top when results page loads
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
@@ -33,13 +32,10 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
     ? getCellIndexForEvent(inputTape[readHeadIndex] || inputTape[0])
     : 0;
 
-  // Only mark a cell as "written" after the read head has advanced into the next cell.
-  // This prevents the first output cell from appearing immediately at time 0.
   const writeHeadCellIndexMax = Math.max(-1, currentCellIndex - 1);
 
   const buildCellToken = (cellAnalysis) => buildCellTokenFromAnalysis(cellAnalysis, CELL_METRICS);
 
-  // Auto-play animation
   useEffect(() => {
     if (!isPlaying || readHeadIndex >= inputTape.length - 1) return;
 
@@ -55,7 +51,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
     return () => clearTimeout(timer);
   }, [isPlaying, readHeadIndex, inputTape.length]);
 
-  // Auto-scroll to current event (only when playing)
   useEffect(() => {
     if (tapeRef.current && isPlaying) {
       const currentCell = tapeRef.current.querySelector(`[data-index="${readHeadIndex}"]`);
@@ -91,11 +86,9 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
 
   const handlePlayPause = () => {
     if (readHeadIndex >= inputTape.length - 1) {
-      // If at the end, reset to beginning and start playing
       setCurrentIndex(0);
       setIsPlaying(true);
     } else {
-      // Toggle play/pause
       setIsPlaying(!isPlaying);
     }
   };
@@ -199,48 +192,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
       color: '#6B7280',
       marginBottom: '1.5rem'
     },
-    metricsCard: {
-      background: 'white',
-      borderRadius: '1rem',
-      padding: '2.5rem',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-      marginBottom: '3rem',
-      marginTop: '3rem'
-    },
-    metricsGrid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-      gap: '1.5rem'
-    },
-    metricBox: {
-      background: '#F9FAFB',
-      padding: '1.5rem',
-      borderRadius: '0.75rem',
-      borderWidth: '1px',
-      borderStyle: 'solid',
-      borderColor: '#E5E7EB'
-    },
-    metricHeader: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '1rem'
-    },
-    metricLabel: {
-      fontSize: '0.875rem',
-      fontWeight: '600',
-      color: '#1F2937'
-    },
-    metricValue: {
-      fontSize: '2rem',
-      fontWeight: 'bold',
-      color: '#4F46E5',
-      marginBottom: '0.5rem'
-    },
-    metricStatus: (isFlag) => ({
-      fontSize: '0.75rem',
-      color: isFlag ? '#EF4444' : '#10B981'
-    }),
     statsCard: {
       background: 'white',
       borderRadius: '1rem',
@@ -546,13 +497,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
     ...analysis
   };
 
-  const displayedMetrics = safeAnalysis.celledMetrics ?? {
-    cv: safeAnalysis.cv,
-    repetition: safeAnalysis.repetition,
-    entropyNorm: safeAnalysis.entropyNorm,
-    compression: safeAnalysis.compression
-  };
-
   const analysisCells = safeAnalysis.cells ?? [];
   const analysisCellStats = safeAnalysis.cellStats;
 
@@ -613,116 +557,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
               </div>
             </div>
 
-            {/* Analysis Metrics */}
-<div style={styles.metricsCard}>
-  <div style={styles.cardHeader}>
-    <span>Analysis Metrics</span>
-  </div>
-
-  <div style={styles.metricsGrid}>
-    {(() => {
-      // --- Compute statuses ---
-      const cvNum = parseFloat(displayedMetrics.cv);
-      const repetitionNum = parseFloat(displayedMetrics.repetition);
-      const entropyNormNum = parseFloat(displayedMetrics.entropyNorm ?? safeAnalysis.entropyNorm);
-      const compressionNum = parseFloat(displayedMetrics.compression);
-
-      const cvStatus = cvNum < 0.10 ? 'danger' : cvNum < 0.25 ? 'warning' : 'normal';
-      const repetitionStatus =
-        repetitionNum >= 80 ? 'danger' : repetitionNum >= 60 ? 'warning' : 'normal';
-      const entropyStatus = entropyNormNum < 0.4 ? 'danger' : entropyNormNum < 0.6 ? 'warning' : 'normal';
-      const compressionStatus =
-        compressionNum <= 0.60 ? 'danger' : compressionNum <= 0.85 ? 'warning' : 'normal';
-
-      const isBad = (status) => status !== 'normal';
-
-      // --- Helper to render each metric ---
-      const renderMetric = (
-        label,
-        value,
-        status,
-        suffix,
-        dangerText,
-        warningText,
-        normalText
-      ) => (
-        <div
-          style={{
-            ...styles.metricBox,
-            borderColor: isBad(status) ? '#EF4444' : '#E5E7EB',
-          }}
-        >
-          <div style={styles.metricHeader}>
-            <span style={styles.metricLabel}>{label}</span>
-            {status === 'normal' ? (
-              <CheckCircle size={16} style={{ color: '#10B981' }} />
-            ) : (
-              <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-            )}
-          </div>
-          <div style={styles.metricValue}>
-            {value}
-            {suffix ? suffix : ''}
-          </div>
-          <div
-            style={{
-              ...styles.metricStatus,
-              color: status === 'normal' ? '#10B981' : '#EF4444',
-            }}
-          >
-            {status === 'danger'
-              ? dangerText
-              : status === 'warning'
-              ? warningText
-              : normalText}
-          </div>
-        </div>
-      );
-
-      return (
-        <>
-          {renderMetric(
-            'Timing Consistency',
-            displayedMetrics.cv,
-            cvStatus,
-            '',
-            'Too Consistent',
-            'Suspicious',
-            'Normal'
-          )}
-          {renderMetric(
-            'Pattern Repetition',
-            displayedMetrics.repetition,
-            repetitionStatus,
-            '%',
-            'High',
-            'Suspicious',
-            'Normal'
-          )}
-          {renderMetric(
-            'Randomness',
-            Number.isFinite(entropyNormNum) ? entropyNormNum.toFixed(2) : '—',
-            entropyStatus,
-            '',
-            'Low',
-            'Suspicious',
-            'Normal'
-          )}
-          {renderMetric(
-            'Pattern Complexity',
-            displayedMetrics.compression,
-            compressionStatus,
-            '',
-            'Too Simple',
-            'Suspicious',
-            'Normal'
-          )}
-        </>
-      );
-    })()}
-  </div>
-</div>
-
             {/* Interaction Statistics */}
             <div style={styles.statsCard}>
               <h3 style={styles.cardHeader}>Interaction Statistics</h3>
@@ -768,48 +602,10 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Repetition</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Entropy</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Compressibility</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'left', fontWeight: '600', color: 'black' }}>Result</th>
                       </tr>
                     </thead>
                     <tbody>
                       {analysisCells.map((w, idx) => {
-                        const suspiciousCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 's').length;
-                        const cautionCount = ['T', 'R', 'E', 'C'].filter(m => w.analysis[m] === 'c').length;
-
-                        const isNotApplicable = w.analysis?.hasEnoughData === false;
-
-                        const NOT_INCLUDED_LABEL = 'Not included';
-
-                        // 3-level cell result: Human / Caution / Suspicious
-                        // Use both suspicious and caution flags so label + color stay consistent.
-                        let cellResultLabel = 'Human';
-                        let rowColor = '#22c55e';
-                        
-                        // Cell classification logic
-                        if (isNotApplicable) {
-                          cellResultLabel = NOT_INCLUDED_LABEL;
-                          rowColor = '#9CA3AF';
-                        } else {
-                          const cellSuspiciousRatio = suspiciousCount / 4;                          
-                          const cellCautionRatio = cautionCount / 4;
-
-                          if (cellSuspiciousRatio >= 0.65) {
-                            cellResultLabel = 'Suspicious';
-                            rowColor = '#ef4444';
-                          } else if ( // Mixed case: suspicious + caution = suspicious
-                            cellSuspiciousRatio >= 0.45 || (cellSuspiciousRatio + cellCautionRatio) >= 0.70
-                          ) {
-                            cellResultLabel = 'Suspicious';
-                            rowColor = '#ef4444';
-                          } else if (cellCautionRatio >= 0.35) {
-                            cellResultLabel = 'Caution';
-                            rowColor = '#fbbf24';
-                          } else {
-                            cellResultLabel = 'Human';
-                            rowColor = '#22c55e';
-                          }
-                        } 
-                        
                         const getFlagEmoji = (flag, color) => {
                             if (flag === 's') return <AlertCircle size={16} color={color || '#ef4444'} />; 
                             if (flag === 'c') return <AlertTriangle size={16} color={color || '#fbbf24'} />; 
@@ -825,14 +621,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.R)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.E)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
-                            <td style={{ padding: '0.75rem' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: rowColor, fontWeight: 600 }}>
-                            {cellResultLabel === 'Suspicious' && <AlertCircle size={18} />}
-                            {cellResultLabel === 'Caution' && <AlertTriangle size={18} />}
-                            {cellResultLabel === 'Human' && <CheckCircle size={18} />}
-                            {cellResultLabel}
-                            </span>
-                          </td>
                           </tr>
                         );
                       })}

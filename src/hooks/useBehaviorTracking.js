@@ -1,6 +1,4 @@
 // src/hooks/useBehaviorTracking.js
-// Custom hook for behavior tracking - PREVENT INITIAL CLICK
-
 import { useState, useEffect, useRef } from 'react';
 
 export const useBehaviorTracking = () => {
@@ -17,7 +15,6 @@ export const useBehaviorTracking = () => {
   };
 
   useEffect(() => {
-    // Wait a bit before starting to track (ignore initial navigation clicks)
     const initTimer = setTimeout(() => {
       isInitialized.current = true;
     }, 300); // 300ms delay
@@ -30,7 +27,6 @@ export const useBehaviorTracking = () => {
       if (!isInitialized.current) return;
       lastInputMethodRef.current = 'keyboard';
 
-      // Avoid recording modifier keys spam; keep meaningful keys only.
       const ignoredKeys = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']);
       if (!ignoredKeys.has(e.key)) {
         recordEvent('K', {
@@ -49,7 +45,7 @@ export const useBehaviorTracking = () => {
 
     // Mouse movement tracking
     const handleMouseMove = (e) => {
-      if (!isInitialized.current) return; // Don't track until initialized
+      if (!isInitialized.current) return; 
       
       const now = Date.now();
       if (now - lastMoveTime > 100) {
@@ -63,11 +59,7 @@ export const useBehaviorTracking = () => {
       }
     };
 
-    // ============================================
-    // GLOBAL CLICK TRACKING // 
-    // ============================================
     const handleGlobalClick = (e) => {
-      // Don't track clicks until quiz is initialized
       if (!isInitialized.current) return;
       
       const now = Date.now();
@@ -93,7 +85,6 @@ export const useBehaviorTracking = () => {
         let elementType = target.tagName.toLowerCase();
         let elementText = '';
         
-        // Skip radio inputs - we already caught them via label
         if (target.matches('input[type="radio"]')) {
           return;
         }
@@ -115,7 +106,6 @@ export const useBehaviorTracking = () => {
         }
         
         // Record the click event
-        // e.detail === 0 is commonly used by browsers to indicate a keyboard-triggered click.
         const inferredMethod = e.detail === 0 ? 'keyboard' : lastInputMethodRef.current;
         recordEvent('C', { 
           x, 

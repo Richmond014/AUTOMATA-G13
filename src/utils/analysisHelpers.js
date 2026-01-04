@@ -32,7 +32,8 @@ export const calculateRepetition = (eventTypes) => {
   const firstBlock = blocks[0];
   let matches = 0;
   
-  blocks.forEach(block => {
+  // Compare other blocks against the first block
+  blocks.slice(1).forEach(block => {
     let similarity = 0;
     for (let i = 0; i < Math.min(block.length, firstBlock.length); i++) {
       if (block[i] === firstBlock[i]) similarity++;
@@ -40,7 +41,8 @@ export const calculateRepetition = (eventTypes) => {
     if (similarity / blockSize >= 0.8) matches++;
   });
   
-  return matches / blocks.length;
+  const denom = Math.max(1, blocks.length - 1);
+  return matches / denom;
 };
 
 // Shannon entropy
@@ -116,7 +118,8 @@ export const partitionIntoCells = (events, cellSizeMs = 5000) => {
         });
       }
       currentCell = [event];
-      currentCellStart = Math.floor(event.timestamp / cellSizeMs) * cellSizeMs;
+      const dt = Math.max(0, event.timestamp - startTime);
+      currentCellStart = startTime + Math.floor(dt / cellSizeMs) * cellSizeMs;
     } else {
       currentCell.push(event);
     }
@@ -149,7 +152,7 @@ export const analyzeCell = (cellEvents) => {
   
   const eventTypes = cellEvents.map(e => e.type);
 
-  const entropyTypes = eventTypes.filter(t => t !== 'M');
+  const entropyTypes = eventTypes;
 
   // Metric-specific weights (used for weighted cell averages)
   const repetitionTypes = eventTypes.filter(t =>
@@ -165,7 +168,8 @@ export const analyzeCell = (cellEvents) => {
   const compressionWeight = compressionTypes.length;
 
   const repetition = calculateRepetition(eventTypes);
-  const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
+  const entropyAlphabet = uniqueCount(entropyTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, entropyAlphabet);
   const compression = calculateCompression(eventTypes);
 
   let cv = null;
@@ -179,15 +183,23 @@ export const analyzeCell = (cellEvents) => {
     Tflag = cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h');
   }
 
-  const hasEntropyDiversity = uniqueCount(entropyTypes) >= 2;
+  const entropyUnique = uniqueCount(entropyTypes);
+  const hasEntropyDiversity = entropyUnique >= 2;
+  const hasEnoughEntropySamples = entropyTypes.length >= 20;
+  const entropyIsSuspiciousSingleType = hasEnoughEntropySamples && entropyUnique === 1;
+
+  const repetitionIsValid = repetitionTypes.length >= 12 && uniqueCount(repetitionTypes) >= 2;
+  const compressionIsValid = compressionTypes.length >= 4;
   
   // Return symbolic flags: s = suspicious, c = caution, h = human, n = not enough data
   return {
     hasEnoughData: true,
     T: Tflag,
-    R: repetition >= 0.75 ? 's' : (repetition >= 0.60 ? 'c' : 'h'),
-    E: !hasEntropyDiversity ? 'n' : (entropyNorm < 0.40 ? 's' : (entropyNorm < 0.60 ? 'c' : 'h')),
-    C: compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h'),
+    R: !repetitionIsValid ? 'n' : (repetition >= 0.75 ? 's' : (repetition >= 0.60 ? 'c' : 'h')),
+    E: entropyIsSuspiciousSingleType
+      ? 's'
+      : (!hasEntropyDiversity ? 'n' : (entropyNorm < 0.40 ? 's' : (entropyNorm < 0.60 ? 'c' : 'h'))),
+    C: !compressionIsValid ? 'n' : (compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h')),
     values: {
       cv,
       repetition,
@@ -221,9 +233,10 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   // Partition into 5-second cells and analyze each
   const cells = partitionIntoCells(events, 5000);
   const cellAnalysisResults = cells.map((cell, idx) => {
+    const t0 = events?.[0]?.timestamp ?? 0;
     const cellMeta = {
-      start: (idx * 5).toFixed(1),
-      end: ((idx + 1) * 5).toFixed(1)
+      start: (((cell.startTime - t0) / 1000)).toFixed(1),
+      end: (((cell.endTime - t0) / 1000)).toFixed(1)
     };
 
     return {
@@ -233,37 +246,39 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     };
   });
   
-  // Count total flags across all cells (DFA state accumulation)
-  // Only count cells with enough data
   let totalSuspicious = 0;
   let totalCaution = 0;
   let validCells = 0;
+  let evidenceCells = 0;
   
   cellAnalysisResults.forEach(wa => {
-    if (wa.analysis.hasEnoughData) {
-      validCells++;
-      ['T', 'R', 'E', 'C'].forEach(metric => {
-        if (wa.analysis[metric] === 's') totalSuspicious++;
-        else if (wa.analysis[metric] === 'c') totalCaution++;
-        // 'n' (not enough data) is ignored
-      });
-    }
+    if (!wa?.analysis?.hasEnoughData) return;
+
+    validCells++;
+
+    const measurable = ['T', 'R', 'E', 'C'].filter((m) => wa.analysis[m] !== 'n').length;
+    if (measurable < 2) return;
+
+    evidenceCells++;
+    ['T', 'R', 'E', 'C'].forEach(metric => {
+      if (wa.analysis[metric] === 's') totalSuspicious++;
+      else if (wa.analysis[metric] === 'c') totalCaution++;
+    });
   });
 
-  // If less than 2 valid cells, use overall metrics instead
-  const useCellAnalysis = validCells >= 2;
+  const useCellAnalysis = evidenceCells >= 2;
 
-  // Calculate overall metrics (for backward compatibility)
   const intervals = [];
   for (let i = 1; i < clickEvents.length; i++) {
     intervals.push(clickEvents[i].timestamp - clickEvents[i - 1].timestamp);
   }
 
   const eventTypes = events.map(e => e.type);
-  const entropyTypes = eventTypes.filter(t => t !== 'M');
+  const entropyTypes = eventTypes;
   const cv = calculateCV(intervals);
   const repetition = calculateRepetition(eventTypes);
-  const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
+  const entropyAlphabet = uniqueCount(entropyTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, entropyAlphabet);
   const compression = calculateCompression(eventTypes);
 
   // Cell-aggregated metrics
@@ -324,18 +339,23 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
 
   // Overall flags 
   const timingFlag = cv < 0.08 ? 1 : (cv < 0.20 ? 0.5 : 0);
-  const repetitionFlag = repetition >= 0.75 ? 1 : (repetition >= 0.60 ? 0.5 : 0);
-  const entropyFlag = uniqueCount(entropyTypes) < 2 ? 0 : (entropyNorm < 0.40 ? 1 : (entropyNorm < 0.60 ? 0.5 : 0));
-  const compressionFlag = compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0);
+  const repetitionFlag = uniqueCount(eventTypes.filter(t => t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R')) < 2 || eventTypes.length < 12
+    ? 0
+    : (repetition >= 0.75 ? 1 : (repetition >= 0.60 ? 0.5 : 0));
+  const entropyUnique = uniqueCount(entropyTypes);
+  const entropyFlag = entropyUnique < 2 ? 0 : (entropyNorm < 0.40 ? 1 : (entropyNorm < 0.60 ? 0.5 : 0));
+  const compressionFlag = eventTypes.filter(t => t === 'C' || t === 'H' || t === 'S').length < 4
+    ? 0
+    : (compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0));
   const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
   // DFA-style classification based on per-cell analysis
-  // Use cell analysis if we have enough cells, otherwise fall back to overall metrics
   let suspiciousRatio, cautionRatio;
   
-  if (useCellAnalysis && validCells > 0) {
-    suspiciousRatio = totalSuspicious / (validCells * 4); // 4 metrics per cell (T, R, E, C)
-    cautionRatio = totalCaution / (validCells * 4);
+  if (useCellAnalysis && evidenceCells > 0) {
+    const denom = evidenceCells * 4; // 4 metrics per evidence cell (T, R, E, C)
+    suspiciousRatio = totalSuspicious / denom;
+    cautionRatio = totalCaution / denom;
   } else {
     suspiciousRatio = flagSum / 5;
     cautionRatio = 0;
@@ -350,7 +370,56 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const perfectScore = score === questions.length;
   const suspiciousCombo = tooFast && perfectScore;
 
+  const buildCellEvidenceReasons = () => {
+    const reasons = [];
+
+    if (suspiciousCombo) reasons.push('very fast answers with a perfect score');
+
+    const metrics = ['T', 'R', 'E', 'C'];
+    const metricCounts = {
+      T: { s: 0, c: 0, h: 0, n: 0, denom: 0 },
+      R: { s: 0, c: 0, h: 0, n: 0, denom: 0 },
+      E: { s: 0, c: 0, h: 0, n: 0, denom: 0 },
+      C: { s: 0, c: 0, h: 0, n: 0, denom: 0 }
+    };
+
+    cellAnalysisResults.forEach((wa) => {
+      if (!wa?.analysis?.hasEnoughData) return;
+      metrics.forEach((metric) => {
+        const value = wa.analysis[metric];
+        if (!metricCounts[metric]) return;
+        if (value === 's') metricCounts[metric].s += 1;
+        else if (value === 'c') metricCounts[metric].c += 1;
+        else if (value === 'h') metricCounts[metric].h += 1;
+        else metricCounts[metric].n += 1;
+        if (value !== 'n') metricCounts[metric].denom += 1;
+      });
+    });
+
+    const addReasonFromShares = (metric, strongText, mildText) => {
+      const { s, c, denom } = metricCounts[metric];
+      if (!denom) return;
+      const suspiciousShare = s / denom;
+      const cautionShare = c / denom;
+
+      if (suspiciousShare >= 0.5) reasons.push(strongText);
+      else if (cautionShare >= 0.35 || (suspiciousShare + cautionShare) >= 0.5) reasons.push(mildText);
+    };
+
+    addReasonFromShares('T', 'highly consistent click timing across time windows', 'unusually consistent click timing across time windows');
+    addReasonFromShares('R', 'high repetition in action patterns across time windows', 'some repetition in action patterns across time windows');
+    addReasonFromShares('E', 'low interaction variety across time windows', 'reduced interaction variety across time windows');
+    addReasonFromShares('C', 'very simple repeated sequences across time windows', 'simple sequences across time windows');
+
+    if (keyboardOnlyFlag >= 1) reasons.push('clicks mostly triggered via keyboard');
+    else if (keyboardOnlyFlag >= 0.5) reasons.push('heavy keyboard-based clicking');
+
+    return reasons;
+  };
+
   const buildEvidenceReasons = () => {
+    if (useCellAnalysis) return buildCellEvidenceReasons();
+
     const reasons = [];
 
     if (suspiciousCombo) reasons.push('very fast answers with a perfect score');
@@ -388,8 +457,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     suspiciousCombo ||
     suspiciousRatio >= 0.45 ||
     (suspiciousRatio + cautionRatio) >= 0.70 ||
-    flagSum >= 2.5 ||
-    suspiciousCombo
+    (!useCellAnalysis && flagSum >= 2.5)
   ) {
     classification = buildDetailsSentence('Detected:', 'Multiple indicators were elevated.');
     color = "#ef4444";
@@ -398,7 +466,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   }
 
   // q_caution
-  else if (cautionRatio >= 0.35 || flagSum >= 1.5) {
+  else if (cautionRatio >= 0.35 || (!useCellAnalysis && flagSum >= 1.5)) {
     classification = buildDetailsSentence('Some signals flagged:', 'Minor irregularities detected.');
     color = "#fbbf24";
     suspicionLevel = "Caution";
@@ -455,4 +523,3 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     }
   };
 };
-
