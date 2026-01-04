@@ -1,7 +1,3 @@
-// src/utils/tapeSimulation.js
-
-// TM terminology: a tape is divided into discrete "cells".
-// In this project, one output tape cell corresponds to one fixed-duration time slice.
 export const CELL_MS_DEFAULT = 5000;
 export const CELL_METRICS_DEFAULT = ['T', 'R', 'E', 'C'];
 
@@ -47,5 +43,5 @@ export const buildCellToken = (
     return `${metric}_${suffix}`;
   };
 
-  return metrics.map((m) => flagToToken(m, analysisObj[m])).join(' | ');
+  return metrics.map((m) => flagToToken(m, analysisObj[m])).join(', ');
 };

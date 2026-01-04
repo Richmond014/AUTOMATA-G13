@@ -33,7 +33,9 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
     ? getCellIndexForEvent(inputTape[readHeadIndex] || inputTape[0])
     : 0;
 
-  const writeHeadCellIndexMax = currentCellIndex;
+  // Only mark a cell as "written" after the read head has advanced into the next cell.
+  // This prevents the first output cell from appearing immediately at time 0.
+  const writeHeadCellIndexMax = Math.max(-1, currentCellIndex - 1);
 
   const buildCellToken = (cellAnalysis) => buildCellTokenFromAnalysis(cellAnalysis, CELL_METRICS);
 
@@ -48,7 +50,7 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
         if (next >= lastIndex) setIsPlaying(false);
         return Math.min(next, lastIndex);
       });
-    }, 1500);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [isPlaying, readHeadIndex, inputTape.length]);
