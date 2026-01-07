@@ -38,6 +38,19 @@ export const buildCellToken = (
   metrics = CELL_METRICS_DEFAULT
 ) => {
   const analysisObj = cellAnalysis?.analysis || cellAnalysis || {};
+  
+  // Use cell symbol if available (new TM-based format)
+  if (analysisObj.cellSymbol) {
+    const symbolToLabel = {
+      's': 'Suspicious',
+      'c': 'Caution',
+      'h': 'Human',
+      'n': 'Not enough data'
+    };
+    return `${analysisObj.cellSymbol.toUpperCase()} (${symbolToLabel[analysisObj.cellSymbol]})`;
+  }
+  
+  // Fallback to old format for backward compatibility
   const flagToToken = (metric, flag) => {
     const suffix = flag === 's' ? 's' : flag === 'c' ? 'c' : flag === 'h' ? 'h' : 'n';
     return `${metric}_${suffix}`;

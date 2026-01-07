@@ -1,6 +1,82 @@
 
 const uniqueCount = (arr) => new Set(arr).size;
 
+// ============================================================================
+// TURING MACHINE TRANSITION TABLE FOR DFA CLASSIFICATION
+// ============================================================================
+// 11 States: q0-q10
+// q0: Not Enough Data (start state)
+// q1-q2: Human
+// q3-q6: Caution
+// q7-q10: Suspicious
+const TM_TRANSITIONS = {
+  q0: { s: 'q5', c: 'q3', h: 'q1', n: 'q0' },
+  q1: { s: 'q5', c: 'q3', h: 'q1', n: 'q2' },
+  q2: { s: 'q5', c: 'q3', h: 'q1', n: 'q2' },
+  q3: { s: 'q7', c: 'q5', h: 'q1', n: 'q4' },
+  q4: { s: 'q7', c: 'q5', h: 'q1', n: 'q4' },
+  q5: { s: 'q9', c: 'q7', h: 'q3', n: 'q6' },
+  q6: { s: 'q9', c: 'q7', h: 'q3', n: 'q6' },
+  q7: { s: 'q10', c: 'q9', h: 'q5', n: 'q8' },
+  q8: { s: 'q10', c: 'q9', h: 'q5', n: 'q8' },
+  q9: { s: 'q10', c: 'q10', h: 'q7', n: 'q10' },
+  q10: { s: 'q10', c: 'q10', h: 'q8', n: 'q10' }
+};
+
+// Map final TM state to simplified classification result
+const STATE_TO_CLASSIFICATION = {
+  q0: { suspicionLevel: 'Not Enough Data', color: '#9CA3AF' },
+  q1: { suspicionLevel: 'Human', color: '#22c55e' },
+  q2: { suspicionLevel: 'Human', color: '#22c55e' },
+  q3: { suspicionLevel: 'Caution', color: '#fbbf24' },
+  q4: { suspicionLevel: 'Caution', color: '#fbbf24' },
+  q5: { suspicionLevel: 'Caution', color: '#fb923c' },
+  q6: { suspicionLevel: 'Caution', color: '#fb923c' },
+  q7: { suspicionLevel: 'Suspicious', color: '#f97316' },
+  q8: { suspicionLevel: 'Suspicious', color: '#f97316' },
+  q9: { suspicionLevel: 'Suspicious', color: '#ef4444' },
+  q10: { suspicionLevel: 'Suspicious', color: '#ef4444' }
+};
+
+// Helper function: Convert 4 metric flags to single cell symbol using composition
+const getCellSymbol = (flags) => {
+  const counts = { s: 0, c: 0, h: 0, n: 0 };
+  ['T', 'R', 'E', 'C'].forEach(metric => {
+    if (flags[metric]) counts[flags[metric]]++;
+  });
+  
+  // Decision logic based on flag composition
+  if (counts.s >= 2) return 's';
+  if (counts.s === 1 && counts.c >= 1) return 's';
+  if (counts.c >= 2) return 'c';
+  if (counts.c === 1 && counts.h >= 2) return 'h';
+  if (counts.h >= 2) return 'h';
+  return 'n';
+};
+
+// Helper function: Get simplified classification message based on TM state
+const getClassificationMessage = (state) => {
+  const messages = {
+    'q0': 'Not enough data to analyze behavior.',
+    'q1': 'Interaction pattern looks natural and human-like.',
+    'q2': 'Interaction pattern looks natural and human-like.',
+    'q3': 'Some indicators suggest possible automated behavior.',
+    'q4': 'Some indicators suggest possible automated behavior.',
+    'q5': 'Some indicators suggest possible automated behavior.',
+    'q6': 'Some indicators suggest possible automated behavior.',
+    'q7': 'Strong indicators of automated interaction detected.',
+    'q8': 'Strong indicators of automated interaction detected.',
+    'q9': 'Strong indicators of automated interaction detected.',
+    'q10': 'Strong indicators of automated interaction detected.'
+  };
+  return messages[state] || 'Unable to determine behavior pattern.';
+};
+
+// Helper function: Run TM transition
+const runTMStep = (currentState, symbol) => {
+  return TM_TRANSITIONS[currentState]?.[symbol] ?? currentState;
+};
+
 // Timing CV (coefficient of variation) T
 export const calculateCV = (intervals) => {
   if (intervals.length < 2) return 0;
@@ -103,34 +179,29 @@ export const partitionIntoCells = (events, cellSizeMs = 5000) => {
   
   const cells = [];
   const startTime = events[0].timestamp;
-  let currentCell = [];
-  let currentCellStart = startTime;
+  const endTime = events[events.length - 1].timestamp;
   
-  events.forEach(event => {
-    const timeInCurrentCell = event.timestamp - currentCellStart;
+  // Calculate total number of cells needed to cover the event time range
+  const totalCells = Math.floor((endTime - startTime) / cellSizeMs) + 1;
+  
+  // Create cells for the time range, but only include cells with events
+  for (let i = 0; i < totalCells; i++) {
+    const cellStart = startTime + (i * cellSizeMs);
+    const cellEnd = cellStart + cellSizeMs;
     
-    if (timeInCurrentCell >= cellSizeMs) {
-      if (currentCell.length > 0) {
-        cells.push({
-          startTime: currentCellStart,
-          endTime: currentCellStart + cellSizeMs,
-          events: currentCell
-        });
-      }
-      currentCell = [event];
-      const dt = Math.max(0, event.timestamp - startTime);
-      currentCellStart = startTime + Math.floor(dt / cellSizeMs) * cellSizeMs;
-    } else {
-      currentCell.push(event);
+    // Collect events that fall into this cell
+    const cellEvents = events.filter(event => 
+      event.timestamp >= cellStart && event.timestamp < cellEnd
+    );
+    
+    // Only add cells that have events
+    if (cellEvents.length > 0) {
+      cells.push({
+        startTime: cellStart,
+        endTime: cellEnd,
+        events: cellEvents
+      });
     }
-  });
-
-  if (currentCell.length > 0) {
-    cells.push({
-      startTime: currentCellStart,
-      endTime: currentCellStart + cellSizeMs,
-      events: currentCell
-    });
   }
   
   return cells;
@@ -141,13 +212,15 @@ export const analyzeCell = (cellEvents) => {
   const clickEvents = cellEvents.filter(e => e.type === "C");
 
   if (clickEvents.length < 2) {
-    return {
+    const flags = {
       hasEnoughData: false,
       T: 'n', // n = not enough data
       R: 'n',
       E: 'n',
       C: 'n'
     };
+    flags.cellSymbol = getCellSymbol(flags);
+    return flags;
   }
   
   const eventTypes = cellEvents.map(e => e.type);
@@ -192,7 +265,7 @@ export const analyzeCell = (cellEvents) => {
   const compressionIsValid = compressionTypes.length >= 4;
   
   // Return symbolic flags: s = suspicious, c = caution, h = human, n = not enough data
-  return {
+  const flags = {
     hasEnoughData: true,
     T: Tflag,
     R: !repetitionIsValid ? 'n' : (repetition >= 0.75 ? 's' : (repetition >= 0.60 ? 'c' : 'h')),
@@ -213,6 +286,11 @@ export const analyzeCell = (cellEvents) => {
       }
     }
   };
+  
+  // Compute cell symbol based on 4 metric flags
+  flags.cellSymbol = getCellSymbol(flags);
+  
+  return flags;
 };
 
 
@@ -239,10 +317,13 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
       end: (((cell.endTime - t0) / 1000)).toFixed(1)
     };
 
+    const analysis = analyzeCell(cell.events);
+    
     return {
       cell: cellMeta,
       eventCount: cell.events.length,
-      analysis: analyzeCell(cell.events)
+      analysis,
+      finalDetectionResult: analysis.cellSymbol
     };
   });
   
@@ -447,38 +528,33 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     return reasons.length ? `${leadIn} ${reasons.join(', ')}.` : fallback;
   };
 
-  // DFA classification: q_human / q_caution / q_suspicious
-  let classification, color, suspicionLevel, dfaState;
+  // Extract Tape 2 symbols (per-cell classification) from cell analysis results
+  const cellTapeSymbols = cellAnalysisResults.map(result => result.analysis.cellSymbol);
   
-  //q_suspicious
-  if (
-    // suspiciousRatio >= 0.65 ||
-    // flagSum >= 3.5 ||
-    suspiciousCombo ||
-    suspiciousRatio >= 0.45 ||
-    (suspiciousRatio + cautionRatio) >= 0.70 ||
-    (!useCellAnalysis && flagSum >= 2.5)
-  ) {
-    classification = buildDetailsSentence('Detected:', 'Multiple indicators were elevated.');
-    color = "#ef4444";
-    suspicionLevel = "Suspicious";
-    dfaState = "q_suspicious";
-  }
-
-  // q_caution
-  else if (cautionRatio >= 0.35 || (!useCellAnalysis && flagSum >= 1.5)) {
-    classification = buildDetailsSentence('Some signals flagged:', 'Minor irregularities detected.');
-    color = "#fbbf24";
-    suspicionLevel = "Caution";
-    dfaState = "q_caution";
-  }
-  // q_human: Normal behavior
-  else {
-    classification = "No strong automation signals detected. Interaction patterns fall within a normal range for this quiz.";
-    color = "#22c55e";
-    suspicionLevel = "Human";
-    dfaState = "q_human";
-  }
+  // Run Tape 2 symbols through TM to get final state and track state progression
+  let currentState = 'q0';
+  const stateProgression = [{ state: 'q0', symbol: null }];
+  
+  cellTapeSymbols.forEach((symbol, idx) => {
+    const nextState = runTMStep(currentState, symbol);
+    stateProgression.push({
+      cellIndex: idx,
+      symbol: symbol,
+      fromState: currentState,
+      toState: nextState
+    });
+    currentState = nextState;
+  });
+  
+  const finalTMState = currentState;
+  const stateClassification = STATE_TO_CLASSIFICATION[finalTMState];
+  
+  // Build classification message using simplified messaging function
+  const classification = getClassificationMessage(finalTMState);
+  
+  const color = stateClassification.color;
+  const suspicionLevel = stateClassification.suspicionLevel;
+  const dfaState = finalTMState;
 
   return {
     score,
@@ -514,6 +590,8 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     keyboardOnlyFlag,
     
     cells: cellAnalysisResults,
+    cellTapeSymbols,
+    stateProgression,
     cellStats: {
       totalCells: cells.length,
       validCells,
