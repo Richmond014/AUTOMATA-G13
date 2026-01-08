@@ -7,7 +7,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing', 'quiz', 'results'
   const [quizResults, setQuizResults] = useState(null);
   const [quizStartTime, setQuizStartTime] = useState(null);
-  const [savedEvents, setSavedEvents] = useState([]); // ← Add this to save events
+  const [savedEvents, setSavedEvents] = useState([]); // ← Used to save events
 
   const handleStartQuiz = () => {
     setCurrentPage('quiz');

@@ -6,7 +6,7 @@ function LandingPage({ onStartQuiz }) {
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
-      const navbarHeight = 100; // Adjust this value based on your navbar height
+      const navbarHeight = 100; 
       const elementPosition = element.getBoundingClientRect().top + window.pageYOffset;
       const offsetPosition = elementPosition - navbarHeight;
 

@@ -18,15 +18,11 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
   const { events, quizAreaRef, recordEvent, recordHover, recordKeyboard } = useBehaviorTracking();
 
   const handleAnswerChange = (question, value) => {
-    // REMOVE THIS - Global click listener already handles it!
-    // Don't record here, the global click listener will catch it
-    
     setAnswers(prev => ({ ...prev, [question]: value }));
     setWarnings(prev => ({ ...prev, [question]: false }));
   };
 
   const handleClear = () => {
-    // Only record the CLEAR action, not the click itself
     recordEvent('CLEAR', { 
       previousAnswerCount: Object.keys(answers).length 
     });
@@ -52,7 +48,6 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
       return;
     }
 
-    // Only record SUBMIT action, not the click itself
     recordEvent('SUBMIT', {
       answeredQuestions: Object.keys(answers).length,
       totalQuestions: questions.length

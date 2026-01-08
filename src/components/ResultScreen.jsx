@@ -8,9 +8,30 @@ import {
   groupEventsIntoBlocks
 } from '../utils/tapeSimulation';
 
+// State color configuration
+const STATE_COLORS = {
+  'q0': { bg: '#F3F4F6', border: '#D1D5DB', text: '#6B7280', label: 'Not Enough Data' },
+  'q1': { bg: '#ECFDF5', border: '#10B981', text: '#22c55e', label: 'Human' },
+  'q2': { bg: '#ECFDF5', border: '#10B981', text: '#22c55e', label: 'Human' },
+  'q3': { bg: '#ECFDF5', border: '#10B981', text: '#22c55e', label: 'Human'  },
+  'q4': { bg: '#ECFDF5', border: '#10B981', text: '#22c55e', label: 'Human'  },
+  'q5': { bg: '#FFEDD5', border: '#F97316', text: '#fb923c', label: 'Caution' },
+  'q6': { bg: '#FFEDD5', border: '#F97316', text: '#fb923c', label: 'Caution' },
+  'q7': { bg: '#FEE2E2', border: '#EF4444', text: '#f97316', label: 'Suspicious' },
+  'q8': { bg: '#FEE2E2', border: '#EF4444', text: '#f97316', label: 'Suspicious' },
+  'q9': { bg: '#FEE2E2', border: '#DC2626', text: '#ef4444', label: 'Suspicious' },
+  'q10': { bg: '#FEE2E2', border: '#DC2626', text: '#ef4444', label: 'Suspicious' }
+};
+
+const getLastWrittenState = (stateProgression, cellIndex) => {
+  if (cellIndex < 0) return STATE_COLORS['q0'];
+  const lastState = stateProgression?.find(sp => sp.cellIndex === cellIndex);
+  const stateLabel = lastState?.toState || 'q0';
+  return STATE_COLORS[stateLabel] || STATE_COLORS['q0'];
+};
+
 function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
   const CELL_MS = CELL_MS_DEFAULT;
-  const CELL_METRICS = CELL_METRICS_DEFAULT;
 
   const inputTape = events;
 
@@ -37,7 +58,7 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
     ? Math.max(-1, currentCellIndex)
     : Math.max(-1, currentCellIndex - 1);
 
-  const buildCellToken = (cellAnalysis) => buildCellTokenFromAnalysis(cellAnalysis, CELL_METRICS);
+  const buildCellToken = (cellAnalysis) => buildCellTokenFromAnalysis(cellAnalysis, CELL_METRICS_DEFAULT);
 
   useEffect(() => {
     if (!isPlaying || readHeadIndex >= inputTape.length - 1) return;
@@ -802,109 +823,26 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
                   )}
 
                   {/* Current DFA State - Updates as tape is processed */}
-                  {safeAnalysis.stateProgression && (
-                    <div style={{ 
-                      marginTop: '1.5rem', 
-                      padding: '1rem', 
-                      backgroundColor: (() => {
-                        if (writeHeadCellIndexMax < 0) return '#F3F4F6'; // Gray background for q0
-                        const lastWrittenState = safeAnalysis.stateProgression?.find(
-                          sp => sp.cellIndex === writeHeadCellIndexMax
-                        );
-                        const stateLabel = lastWrittenState?.toState || 'q0';
-                        const bgColors = {
-                          'q0': '#F3F4F6',  // Gray - Not Enough Data
-                          'q1': '#ECFDF5',  // Light Green - Human
-                          'q2': '#ECFDF5',  // Light Green - Human
-                          'q3': '#FEF3C7',  // Light Yellow - Caution
-                          'q4': '#FEF3C7',  // Light Yellow - Caution
-                          'q5': '#FFEDD5',  // Light Orange - Caution
-                          'q6': '#FFEDD5',  // Light Orange - Caution
-                          'q7': '#FEE2E2',  // Light Red - Suspicious
-                          'q8': '#FEE2E2',  // Light Red - Suspicious
-                          'q9': '#FEE2E2',  // Light Red - Suspicious
-                          'q10': '#FEE2E2'  // Light Red - Suspicious
-                        };
-                        return bgColors[stateLabel] || '#F3F4F6';
-                      })(),
-                      borderRadius: '0.5rem', 
-                      border: `1px solid ${(() => {
-                        if (writeHeadCellIndexMax < 0) return '#D1D5DB'; // Gray border for q0
-                        const lastWrittenState = safeAnalysis.stateProgression?.find(
-                          sp => sp.cellIndex === writeHeadCellIndexMax
-                        );
-                        const stateLabel = lastWrittenState?.toState || 'q0';
-                        const borderColors = {
-                          'q0': '#D1D5DB',  // Gray - Not Enough Data
-                          'q1': '#10B981',  // Green - Human
-                          'q2': '#10B981',  // Green - Human
-                          'q3': '#F59E0B',  // Yellow - Caution
-                          'q4': '#F59E0B',  // Yellow - Caution
-                          'q5': '#F97316',  // Orange - Caution
-                          'q6': '#F97316',  // Orange - Caution
-                          'q7': '#EF4444',  // Red - Suspicious
-                          'q8': '#EF4444',  // Red - Suspicious
-                          'q9': '#DC2626',  // Deep Red - Suspicious
-                          'q10': '#DC2626'  // Deep Red - Suspicious
-                        };
-                        return borderColors[stateLabel] || '#D1D5DB';
-                      })()}`, 
-                      textAlign: 'center' 
-                    }}>
-                      <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.5rem' }}>Current State:</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: (() => {
-                          // Find the state for the last written cell
-                          if (writeHeadCellIndexMax < 0) {
-                            return '#6B7280'; // Gray for Not Enough Data
-                          }
-                          const lastWrittenState = safeAnalysis.stateProgression?.find(
-                            sp => sp.cellIndex === writeHeadCellIndexMax
-                          );
-                          const stateLabel = lastWrittenState?.toState || 'q0';
-                          
-                          // Map states to colors
-                          const stateColors = {
-                            'q0': '#6B7280',  // Gray - Not Enough Data
-                            'q1': '#22c55e',  // Green - Human
-                            'q2': '#22c55e',  // Green - Human
-                            'q3': '#fbbf24',  // Yellow - Caution
-                            'q4': '#fbbf24',  // Yellow - Caution
-                            'q5': '#fb923c',  // Orange - Caution
-                            'q6': '#fb923c',  // Orange - Caution
-                            'q7': '#f97316',  // Deep Orange - Suspicious
-                            'q8': '#f97316',  // Deep Orange - Suspicious
-                            'q9': '#ef4444',  // Red - Suspicious
-                            'q10': '#ef4444'  // Red - Suspicious
-                          };
-                          return stateColors[stateLabel] || '#6B7280';
-                        })() }}>
-                        {(() => {
-                          // Find the state for the last written cell
-                          if (writeHeadCellIndexMax < 0) {
-                            return 'q0 - Not Enough Data';
-                          }
-                          const lastWrittenState = safeAnalysis.stateProgression?.find(
-                            sp => sp.cellIndex === writeHeadCellIndexMax
-                          );
-                          const stateLabel = lastWrittenState?.toState || 'q0';
-                          const stateInfo = {
-                            'q0': 'Not Enough Data',
-                            'q1': 'Human',
-                            'q2': 'Human',
-                            'q3': 'Caution',
-                            'q4': 'Caution',
-                            'q5': 'Caution',
-                            'q6': 'Caution',
-                            'q7': 'Suspicious',
-                            'q8': 'Suspicious',
-                            'q9': 'Suspicious',
-                            'q10': 'Suspicious'
-                          };
-                          return `${stateLabel} - ${stateInfo[stateLabel] || 'Unknown'}`;
-                        })()}
+                  {safeAnalysis.stateProgression && (() => {
+                    const stateInfo = getLastWrittenState(safeAnalysis.stateProgression, writeHeadCellIndexMax);
+                    const lastState = writeHeadCellIndexMax < 0 ? null : safeAnalysis.stateProgression?.find(sp => sp.cellIndex === writeHeadCellIndexMax);
+                    const stateLabel = lastState?.toState || 'q0';
+                    return (
+                      <div style={{ 
+                        marginTop: '1.5rem', 
+                        padding: '1rem', 
+                        backgroundColor: stateInfo.bg,
+                        borderRadius: '0.5rem', 
+                        border: `1px solid ${stateInfo.border}`,
+                        textAlign: 'center' 
+                      }}>
+                        <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.5rem' }}>Current State:</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: stateInfo.text }}>
+                          {`${stateLabel} - ${stateInfo.label}`}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   <div style={styles.blockInfo}>
                     <strong>Tape Blocks:</strong> {blocks.length} segments detected
