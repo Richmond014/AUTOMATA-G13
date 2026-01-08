@@ -28,11 +28,19 @@ function App() {
   };
 
   const handleGoHome = () => {
-    setQuizResults(null);
-    setSavedEvents([]); // ← Clear events
-    setQuizStartTime(null);
-    setCurrentPage('landing');
-  };
+  setQuizResults(null);
+  setSavedEvents([]);
+  setQuizStartTime(null);
+  setCurrentPage('landing');
+
+  if (window.location.hash) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
+  setTimeout(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, 0);
+};
 
   return (
     <div className="App">
