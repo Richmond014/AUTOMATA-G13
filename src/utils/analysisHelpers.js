@@ -12,10 +12,10 @@ const TM_TRANSITIONS = {
   // q2 - (Human-Not enough data)  
   q2: { s: 'q5', c: 'q3', h: 'q1', n: 'q2' },
   
-  // q3 - (Mild Evidence) (Human Label)
+  // q3 - (Mild Evidence) 
   q3: { s: 'q7', c: 'q5', h: 'q1', n: 'q4' },
   
-  // q4 - (Mild Evidence-Not enough data) (Human Label)
+  // q4 - (Mild Evidence-Not enough data) 
   q4: { s: 'q7', c: 'q5', h: 'q1', n: 'q4' },
   
   // q5 - (Caution) 
@@ -42,8 +42,8 @@ const STATE_TO_CLASSIFICATION = {
   q0: { suspicionLevel: 'Not Enough Data', color: '#9CA3AF' },
   q1: { suspicionLevel: 'Human', color: '#22c55e' },
   q2: { suspicionLevel: 'Human', color: '#22c55e' },
-  q3: { suspicionLevel: 'Human', color: '#22c55e' },
-  q4: { suspicionLevel: 'Human', color: '#22c55e' },
+  q3: { suspicionLevel: 'Human', color: '#fb923c' },
+  q4: { suspicionLevel: 'Human', color: '#fb923c' },
   q5: { suspicionLevel: 'Caution', color: '#fb923c' },
   q6: { suspicionLevel: 'Caution', color: '#fb923c' },
   q7: { suspicionLevel: 'Suspicious', color: '#ef4444' },
@@ -62,6 +62,7 @@ const getCellSymbol = (flags) => {
   // Decision logic based on flag composition
   if (counts.s >= 2) return 's';
   if (counts.s === 1 && counts.c >= 1) return 's';
+  if (counts.s === 1) return 'c';
   if (counts.c >= 2) return 'c';
   if (counts.c === 1 && counts.h >= 2) return 'h';
   if (counts.h >= 2) return 'h';
@@ -74,8 +75,8 @@ const getClassificationMessage = (state) => {
     'q0': 'Not enough data to analyze behavior.',
     'q1': 'Interaction pattern looks natural and human-like.',
     'q2': 'Interaction pattern looks natural and human-like.',
-    'q3': 'Interaction pattern looks natural and human-like.',
-    'q4': 'Interaction pattern looks natural and human-like.',
+    'q3': 'Some indicators suggest possible automated behavior.',
+    'q4': 'Some indicators suggest possible automated behavior.',
     'q5': 'Some indicators suggest possible automated behavior.',
     'q6': 'Some indicators suggest possible automated behavior.',
     'q7': 'Strong indicators of automated interaction detected.',
@@ -254,6 +255,8 @@ export const analyzeCell = (cellEvents) => {
   const hasEntropyDiversity = entropyUnique >= 2;
   const hasEnoughEntropySamples = eventTypes.length >= 20;
   const entropyIsSuspiciousSingleType = hasEnoughEntropySamples && entropyUnique === 1;
+  // Penalize low diversity: flag suspicious if ≤2 unique types with ≥10 events
+  const lowEntropyDiversity = eventTypes.length >= 10 && entropyUnique <= 2;
 
   const repetitionTypes = eventTypes.filter(t =>
     t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
@@ -262,6 +265,10 @@ export const analyzeCell = (cellEvents) => {
     t === 'C' || t === 'H' || t === 'S'
   );
   
+  // Check for zero mouse moves as a suspicious signal
+  const mouseMovements = cellEvents.filter(e => e.type === 'M').length;
+  const hasZeroMouseMoves = compressionTypes.length >= 4 && mouseMovements === 0;
+  
   const repetitionIsValid = repetitionTypes.length >= 12 && uniqueCount(repetitionTypes) >= 2;
   const compressionIsValid = compressionTypes.length >= 4;
   
@@ -269,10 +276,10 @@ export const analyzeCell = (cellEvents) => {
     hasEnoughData: true,
     T: Tflag,
     R: !repetitionIsValid ? 'n' : (repetition >= 0.75 ? 's' : (repetition >= 0.60 ? 'c' : 'h')),
-    E: entropyIsSuspiciousSingleType
+    E: entropyIsSuspiciousSingleType || lowEntropyDiversity
       ? 's'
       : (!hasEntropyDiversity ? 'n' : (entropyNorm < 0.40 ? 's' : (entropyNorm < 0.60 ? 'c' : 'h'))),
-    C: !compressionIsValid ? 'n' : (compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h'))
+    C: !compressionIsValid ? 'n' : (hasZeroMouseMoves ? 's' : (compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h')))
   };
   
   // Output the final cell symbol based on the 4 flags
