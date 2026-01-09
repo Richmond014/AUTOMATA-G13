@@ -239,23 +239,6 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     };
   });
 
-  // Calculate overall metrics for display
-  const intervals = [];
-  for (let i = 1; i < clickEvents.length; i++) {
-    intervals.push(clickEvents[i].timestamp - clickEvents[i - 1].timestamp);
-  }
-
-  const eventTypes = events.map(e => e.type);
-  const cv = calculateCV(intervals);
-  const repetition = calculateRepetition(eventTypes);
-
-  const entropyTypes = eventTypes.filter(t =>
-    t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
-  );
-  const entropyAlphabet = uniqueCount(entropyTypes);
-  const entropyNorm = calculateNormalizedEntropy(entropyTypes, entropyAlphabet);
-  const compression = calculateCompression(eventTypes);
-
   // Keyboard-only usage (informational only)
   const keyboardEvents = events.filter(e => e.type === 'K');
   const keyboardClicks = clickEvents.filter(e => e.method === 'keyboard');
@@ -270,11 +253,6 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const totalTimeSec = (totalTimeMs / 1000).toFixed(0);
   const avgTimePerQuestion = totalQuestions > 0 ? (totalTimeMs / totalQuestions / 1000) : 0;
 
-  // Extra global signals used in final thresholding
-  const tooFast = avgTimePerQuestion < 1.0;
-  const perfectScore = totalQuestions > 0 && score === totalQuestions;
-  const suspiciousCombo = tooFast && perfectScore;
-
   // Official detector: ratio aggregation across all valid cells.
   // Count 's' and 'c' across (T/R/E/C) for each cell with enough data.
   // 'n' (not enough data) is ignored in the ratios (does not affect numerator or denominator).
@@ -284,32 +262,71 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   let human = 0;
   let notEnough = 0;
 
+  // Cell-level counters (do not replace per-cell T/R/E/C flags).
+  // These help avoid "dilution" where a few suspicious windows get averaged away.
+  let cellsWithSuspicious = 0;
+  let cellsWithCaution = 0;
+
   for (const r of cellAnalysisResults) {
     const a = r?.analysis;
     if (!a?.hasEnoughData) continue;
-    validCells++;
+
+    let cellSuspicious = 0;
+    let cellCaution = 0;
+    let cellHuman = 0;
+    let cellNotEnough = 0;
+
+    let cellHasS = false;
+    let cellHasC = false;
 
     for (const m of METRICS) {
       const v = a?.[m];
       if (!v) continue;
       if (v === 'n') {
-        notEnough++;
+        cellNotEnough++;
         continue;
       }
 
-      if (v === 's') suspicious++;
-      else if (v === 'c') caution++;
-      else if (v === 'h') human++;
+      if (v === 's') {
+        cellSuspicious++;
+        cellHasS = true;
+      } else if (v === 'c') {
+        cellCaution++;
+        cellHasC = true;
+      } else if (v === 'h') {
+        cellHuman++;
+      }
     }
+
+    // A "valid" cell must contribute at least 1 usable metric (s/c/h).
+    const cellObserved = cellSuspicious + cellCaution + cellHuman;
+    if (cellObserved === 0) continue;
+
+    validCells++;
+    suspicious += cellSuspicious;
+    caution += cellCaution;
+    human += cellHuman;
+    notEnough += cellNotEnough;
+
+    if (cellHasS) cellsWithSuspicious++;
+    if (cellHasC) cellsWithCaution++;
   }
 
   const denomObserved = suspicious + caution + human;
-  const denomTotal = validCells * 4;
-  // Ratios are computed over observed (non-'n') metric samples so N/A does not dilute.
-  const suspiciousRatio = denomObserved > 0 ? suspicious / denomObserved : 0;
-  const cautionRatio = denomObserved > 0 ? caution / denomObserved : 0;
+  const denomTotal = validCells * METRICS.length;
 
-  // Final classification is decided ONLY from per-cell analysis ratios (plus the suspiciousCombo shortcut).
+  // Coverage-aware ratios (treat 'n' as missing evidence rather than excluding it)
+  const suspiciousRatioTotal = denomTotal > 0 ? suspicious / denomTotal : 0;
+  const cautionRatioTotal = denomTotal > 0 ? caution / denomTotal : 0;
+
+  // Weighted score (s counts more than c), normalized 0..1
+  const WEIGHT_S = 2;
+  const WEIGHT_C = 1;
+  const weightedScoreTotal = denomTotal > 0
+    ? (WEIGHT_S * suspicious + WEIGHT_C * caution) / (WEIGHT_S * denomTotal)
+    : 0;
+
+  // Final classification is decided ONLY from per-cell analysis summary.
   // Low-data sessions: explicitly return InsufficientData (no overall-flag fallback).
   const hasInsufficientCellData = validCells < 2 || denomObserved === 0;
 
@@ -319,13 +336,12 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     suspicionLevel = 'InsufficientData';
     dfaState = 'q_insufficient';
   } else if (
-    suspiciousCombo ||
-    suspiciousRatio >= 0.45 ||
-    (suspiciousRatio + cautionRatio) >= 0.70
+    // Single-score threshold (coverage-aware)
+    weightedScoreTotal >= 0.32
   ) {
     suspicionLevel = 'Suspicious';
     dfaState = 'q_suspicious';
-  } else if (cautionRatio >= 0.35) {
+  } else if (weightedScoreTotal >= 0.24) {
     suspicionLevel = 'Caution';
     dfaState = 'q_caution';
   } else {
@@ -338,18 +354,13 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     ? 'Insufficient interaction data to classify reliably — answer a few more questions and interact normally, then retry.'
     : getMessageFromLevel(suspicionLevel);
 
-  // Keep a numeric score for display/debug consistency
-  const aggregatedScore = 100 * suspiciousRatio + 50 * cautionRatio;
+  // Keep a numeric score for display/debug consistency (0..100)
+  const aggregatedScore = weightedScoreTotal * 100;
 
   return {
     score,
     totalQuestions,
     dfaState,
-    overallMetricsNote: 'Overall metrics (informational only; not used in final classification)',
-    cv: cv.toFixed(3),
-    repetition: (repetition * 100).toFixed(1),
-    entropyNorm: entropyNorm.toFixed(2),
-    compression: compression.toFixed(2),
     classification,
     color,
     suspicionLevel,
@@ -367,14 +378,21 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     keyboardNavigation: keyboardEvents.length,
     keyboardClicks: keyboardClicks.length,
     keyboardRatio: (keyboardRatio * 100).toFixed(1),
-    suspiciousCombo,
     
     cells: cellAnalysisResults,
     cellStats: {
       totalCells: cells.length,
       validCells,
-      suspiciousRatio: (suspiciousRatio * 100).toFixed(1),
-      cautionRatio: (cautionRatio * 100).toFixed(1),
+      // Primary ratios are coverage-aware (denomTotal)
+      suspiciousRatio: (suspiciousRatioTotal * 100).toFixed(1),
+      cautionRatio: (cautionRatioTotal * 100).toFixed(1),
+
+      suspiciousRatioTotal: (suspiciousRatioTotal * 100).toFixed(1),
+      cautionRatioTotal: (cautionRatioTotal * 100).toFixed(1),
+      weightedScoreTotal: (weightedScoreTotal * 100).toFixed(1),
+
+      cellsWithSuspicious,
+      cellsWithCaution,
       denom: denomObserved,
       denomObserved,
       denomTotal,
