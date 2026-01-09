@@ -1,99 +1,24 @@
 
 const uniqueCount = (arr) => new Set(arr).size;
 
-// TURING MACHINE TRANSITION TABLE 
-const TM_TRANSITIONS = {
-  // q0 - (Start State/ Not Enough Data)  
-  q0: { s: 'q5', c: 'q3', h: 'q1', n: 'q0' },
-  
-  // q1 - (Human) 
-  q1: { s: 'q5', c: 'q3', h: 'q1', n: 'q2' },
-  
-  // q2 - (Human-Not enough data)  
-  q2: { s: 'q5', c: 'q3', h: 'q1', n: 'q2' },
-  
-  // q3 - (Mild Evidence) 
-  q3: { s: 'q7', c: 'q5', h: 'q1', n: 'q4' },
-  
-  // q4 - (Mild Evidence-Not enough data) 
-  q4: { s: 'q7', c: 'q5', h: 'q1', n: 'q4' },
-  
-  // q5 - (Caution) 
-  q5: { s: 'q9', c: 'q7', h: 'q3', n: 'q6' },
-  
-  // q6 - (Caution-Not enough data) 
-  q6: { s: 'q9', c: 'q7', h: 'q3', n: 'q6' },
-  
-  // q7 - (Strong Evidence) 
-  q7: { s: 'q9', c: 'q9', h: 'q5', n: 'q8' },
-  
-  // q8 - (Strong Evidence-Not enough data)
-  q8: { s: 'q9', c: 'q9', h: 'q5', n: 'q8' },
-  
-  // q9 - (Suspicious) 
-  q9: { s: 'q9', c: 'q9', h: 'q7', n: 'q10' },
-  
-  // q10 - (Suspicious-Not enough data) 
-  q10: { s: 'q9', c: 'q9', h: 'q7', n: 'q10' }
+const LEVEL_META = {
+  InsufficientData: { color: '#9CA3AF' },
+  Human: { color: '#22c55e' },
+  Caution: { color: '#fb923c' },
+  Suspicious: { color: '#ef4444' }
 };
 
-// Map final TM state to simplified classification result
-const STATE_TO_CLASSIFICATION = {
-  q0: { suspicionLevel: 'Not Enough Data', color: '#9CA3AF' },
-  q1: { suspicionLevel: 'Human', color: '#22c55e' },
-  q2: { suspicionLevel: 'Human', color: '#22c55e' },
-  q3: { suspicionLevel: 'Human', color: '#fb923c' },
-  q4: { suspicionLevel: 'Human', color: '#fb923c' },
-  q5: { suspicionLevel: 'Caution', color: '#fb923c' },
-  q6: { suspicionLevel: 'Caution', color: '#fb923c' },
-  q7: { suspicionLevel: 'Suspicious', color: '#ef4444' },
-  q8: { suspicionLevel: 'Suspicious', color: '#ef4444' },
-  q9: { suspicionLevel: 'Suspicious', color: '#ef4444' },
-  q10: { suspicionLevel: 'Suspicious', color: '#ef4444' }
+const getMessageFromLevel = (level) => {
+  if (level === 'InsufficientData') return 'Insufficient interaction data — keep interacting so behavior analysis can run.';
+  if (level === 'Human') return 'Interaction pattern looks natural and human-like.';
+  if (level === 'Caution') return 'Some indicators suggest possible automated behavior.';
+  return 'Strong indicators of automated interaction detected.';
 };
 
-// This function convert 4 metric flags (Multi-pass) to single cell symbol using composition
-const getCellSymbol = (flags) => {
-  const counts = { s: 0, c: 0, h: 0, n: 0 };
-  ['T', 'R', 'E', 'C'].forEach(metric => {
-    if (flags[metric]) counts[flags[metric]]++;
-  });
-  
-  // Decision logic based on flag composition
-  if (counts.s >= 2) return 's';
-  if (counts.s === 1 && counts.c >= 1) return 's';
-  if (counts.s === 1) return 'c';
-  if (counts.c >= 2) return 'c';
-  if (counts.c === 1 && counts.h >= 2) return 'h';
-  if (counts.h >= 2) return 'h';
-  return 'n';
-};
-
-// Function to get simplified classification message based on TM state
-const getClassificationMessage = (state) => {
-  const messages = {
-    'q0': 'Not enough data to analyze behavior.',
-    'q1': 'Interaction pattern looks natural and human-like.',
-    'q2': 'Interaction pattern looks natural and human-like.',
-    'q3': 'Some indicators suggest possible automated behavior.',
-    'q4': 'Some indicators suggest possible automated behavior.',
-    'q5': 'Some indicators suggest possible automated behavior.',
-    'q6': 'Some indicators suggest possible automated behavior.',
-    'q7': 'Strong indicators of automated interaction detected.',
-    'q8': 'Strong indicators of automated interaction detected.',
-    'q9': 'Strong indicators of automated interaction detected.',
-    'q10': 'Strong indicators of automated interaction detected.'
-  };
-  return messages[state] || 'Unable to determine behavior pattern.';
-};
-
-// Run TM transition
-const runTMStep = (currentState, symbol) => {
-  return TM_TRANSITIONS[currentState]?.[symbol] ?? currentState;
-};
+const METRICS = ['T', 'R', 'E', 'C'];
 
 // Timing CV (coefficient of variation) = T
-export const calculateCV = (intervals) => {
+const calculateCV = (intervals) => {
   if (intervals.length < 2) return 0;
   const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
   const variance = intervals.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / intervals.length;
@@ -102,7 +27,7 @@ export const calculateCV = (intervals) => {
 };
 
 // Repetition (pattern repetition) = R
-export const calculateRepetition = (eventTypes) => {
+const calculateRepetition = (eventTypes) => {
   // Filter out mouse movements (Not included in calculation of R)
   const meaningfulEvents = eventTypes.filter(t => 
     t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
@@ -137,7 +62,7 @@ export const calculateRepetition = (eventTypes) => {
 };
 
 // Shannon entropy
-export const calculateEntropy = (eventTypes) => {
+const calculateEntropy = (eventTypes) => {
   const freq = {};
   eventTypes.forEach(t => freq[t] = (freq[t] || 0) + 1);
   let entropy = 0;
@@ -169,7 +94,7 @@ export const calculateNormalizedEntropy = (
 };
 
 // Compression Ratio - C
-export const calculateCompression = (eventTypes) => {
+const calculateCompression = (eventTypes) => {
   // Only analyze clicks, hovers, scrolls
   const meaningfulEvents = eventTypes.filter(t => 
     t === 'C' || t === 'H' || t === 'S'
@@ -188,7 +113,7 @@ export const calculateCompression = (eventTypes) => {
 };
 
 // This is where the events are grouped into time segments (5s) for analysis and outputted it to the tape 2(Output tape).
-export const partitionIntoCells = (events, cellSizeMs = 5000) => {
+const partitionIntoCells = (events, cellSizeMs = 5000) => {
   if (events.length === 0) return [];
   
   const cells = [];
@@ -218,7 +143,7 @@ export const partitionIntoCells = (events, cellSizeMs = 5000) => {
 };
 
 // Inaanalyse per cell for the 4 metric flags and the overall result of it. 
-export const analyzeCell = (cellEvents) => {
+const analyzeCell = (cellEvents) => {
   const clickEvents = cellEvents.filter(e => e.type === "C");
 
   if (clickEvents.length < 2) {
@@ -229,15 +154,20 @@ export const analyzeCell = (cellEvents) => {
       E: 'n',
       C: 'n'
     };
-    flags.cellSymbol = getCellSymbol(flags);
     return flags;
   }
   
   const eventTypes = cellEvents.map(e => e.type);
 
+  // Entropy should reflect meaningful interaction diversity, not noise (e.g., mouse moves).
+  // Keep this consistent with repetition/tab-switch related event types.
+  const entropyTypes = eventTypes.filter(t =>
+    t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
+  );
+
   const repetition = calculateRepetition(eventTypes);
-  const entropyAlphabet = uniqueCount(eventTypes);
-  const entropyNorm = calculateNormalizedEntropy(eventTypes, entropyAlphabet);
+  const entropyAlphabet = uniqueCount(entropyTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, entropyAlphabet);
   const compression = calculateCompression(eventTypes);
 
   let cv = null;
@@ -251,12 +181,12 @@ export const analyzeCell = (cellEvents) => {
     Tflag = cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h');
   }
 
-  const entropyUnique = uniqueCount(eventTypes);
+  const entropyUnique = uniqueCount(entropyTypes);
   const hasEntropyDiversity = entropyUnique >= 2;
-  const hasEnoughEntropySamples = eventTypes.length >= 20;
+  const hasEnoughEntropySamples = entropyTypes.length >= 20;
   const entropyIsSuspiciousSingleType = hasEnoughEntropySamples && entropyUnique === 1;
   // Penalize low diversity: flag suspicious if ≤2 unique types with ≥10 events
-  const lowEntropyDiversity = eventTypes.length >= 10 && entropyUnique <= 2;
+  const lowEntropyDiversity = entropyTypes.length >= 10 && entropyUnique <= 2;
 
   const repetitionTypes = eventTypes.filter(t =>
     t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
@@ -281,31 +211,19 @@ export const analyzeCell = (cellEvents) => {
       : (!hasEntropyDiversity ? 'n' : (entropyNorm < 0.40 ? 's' : (entropyNorm < 0.60 ? 'c' : 'h'))),
     C: !compressionIsValid ? 'n' : (hasZeroMouseMoves ? 's' : (compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h')))
   };
-  
-  // Output the final cell symbol based on the 4 flags
-  flags.cellSymbol = getCellSymbol(flags);
-  
+
   return flags;
 };
 
 
 export const analyzeQuizBehavior = (score, events, questions, startTimeValue) => {
   const clickEvents = events.filter(e => e.type === "C");
-  
-  if (clickEvents.length < 3) {
-    return {
-      error: "Not enough timing data to analyze behavior",
-      message: "Please complete at least 3 questions for behavior analysis",
-      score,
-      totalQuestions: questions.length,
-      clicks: clickEvents.length,
-      totalEvents: events.length
-    };
-  }
+
+  const totalQuestions = questions?.length ?? 0;
 
   // Partition into 5-second cells and analyze each event cell
   const cells = partitionIntoCells(events, 5000);
-  const cellAnalysisResults = cells.map((cell, idx) => {
+  const cellAnalysisResults = cells.map((cell) => {
     const t0 = events?.[0]?.timestamp ?? 0;
     const cellMeta = {
       start: (((cell.startTime - t0) / 1000)).toFixed(1),
@@ -318,7 +236,6 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
       cell: cellMeta,
       eventCount: cell.events.length,
       analysis,
-      finalDetectionResult: analysis.cellSymbol
     };
   });
 
@@ -331,55 +248,104 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const eventTypes = events.map(e => e.type);
   const cv = calculateCV(intervals);
   const repetition = calculateRepetition(eventTypes);
-  const entropyAlphabet = uniqueCount(eventTypes);
-  const entropyNorm = calculateNormalizedEntropy(eventTypes, entropyAlphabet);
+
+  const entropyTypes = eventTypes.filter(t =>
+    t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
+  );
+  const entropyAlphabet = uniqueCount(entropyTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, entropyAlphabet);
   const compression = calculateCompression(eventTypes);
 
-  // Keyboard-only usage 
+  // Keyboard-only usage (informational only)
   const keyboardEvents = events.filter(e => e.type === 'K');
   const keyboardClicks = clickEvents.filter(e => e.method === 'keyboard');
   const totalClicks = clickEvents.length;
   const keyboardRatio = totalClicks > 0 ? keyboardClicks.length / totalClicks : 0;
-  
-  const keyboardOnlyFlag = totalClicks >= 5
-    ? (keyboardRatio >= 0.90 ? 1 : (keyboardRatio >= 0.70 ? 0.5 : 0))
-    : 0;
 
   // Total time and average time per question
-  const totalTimeMs = Date.now() - startTimeValue;
+  const safeStartTimeMs = Number.isFinite(startTimeValue)
+    ? startTimeValue
+    : (events?.[0]?.timestamp ?? Date.now());
+  const totalTimeMs = Math.max(0, Date.now() - safeStartTimeMs);
   const totalTimeSec = (totalTimeMs / 1000).toFixed(0);
-  const avgTimePerQuestion = totalTimeMs / questions.length / 1000;
+  const avgTimePerQuestion = totalQuestions > 0 ? (totalTimeMs / totalQuestions / 1000) : 0;
 
-  // Extract Tape 2 symbols (per-cell) from cell analysis results that will be used for Tape 2 processing
-  const cellTapeSymbols = cellAnalysisResults.map(result => result.analysis.cellSymbol);
-  
-  // This is where the symbols are run to Tape 2 for the final state and track state progression
-  let currentState = 'q0';
-  const stateProgression = [{ state: 'q0', symbol: null }];
-  
-  cellTapeSymbols.forEach((symbol, idx) => {
-    const nextState = runTMStep(currentState, symbol);
-    stateProgression.push({
-      cellIndex: idx,
-      symbol: symbol,
-      fromState: currentState,
-      toState: nextState
-    });
-    currentState = nextState;
-  });
-  
-  const finalTMState = currentState;
-  const stateClassification = STATE_TO_CLASSIFICATION[finalTMState];
-  
-  const classification = getClassificationMessage(finalTMState);
-  
-  const color = stateClassification.color;
-  const suspicionLevel = stateClassification.suspicionLevel;
-  const dfaState = finalTMState;
+  // Extra global signals used in final thresholding
+  const tooFast = avgTimePerQuestion < 1.0;
+  const perfectScore = totalQuestions > 0 && score === totalQuestions;
+  const suspiciousCombo = tooFast && perfectScore;
+
+  // Official detector: ratio aggregation across all valid cells.
+  // Count 's' and 'c' across (T/R/E/C) for each cell with enough data.
+  // 'n' (not enough data) is ignored in the ratios (does not affect numerator or denominator).
+  let validCells = 0;
+  let suspicious = 0;
+  let caution = 0;
+  let human = 0;
+  let notEnough = 0;
+
+  for (const r of cellAnalysisResults) {
+    const a = r?.analysis;
+    if (!a?.hasEnoughData) continue;
+    validCells++;
+
+    for (const m of METRICS) {
+      const v = a?.[m];
+      if (!v) continue;
+      if (v === 'n') {
+        notEnough++;
+        continue;
+      }
+
+      if (v === 's') suspicious++;
+      else if (v === 'c') caution++;
+      else if (v === 'h') human++;
+    }
+  }
+
+  const denomObserved = suspicious + caution + human;
+  const denomTotal = validCells * 4;
+  // Ratios are computed over observed (non-'n') metric samples so N/A does not dilute.
+  const suspiciousRatio = denomObserved > 0 ? suspicious / denomObserved : 0;
+  const cautionRatio = denomObserved > 0 ? caution / denomObserved : 0;
+
+  // Final classification is decided ONLY from per-cell analysis ratios (plus the suspiciousCombo shortcut).
+  // Low-data sessions: explicitly return InsufficientData (no overall-flag fallback).
+  const hasInsufficientCellData = validCells < 2 || denomObserved === 0;
+
+  let suspicionLevel;
+  let dfaState;
+  if (hasInsufficientCellData) {
+    suspicionLevel = 'InsufficientData';
+    dfaState = 'q_insufficient';
+  } else if (
+    suspiciousCombo ||
+    suspiciousRatio >= 0.45 ||
+    (suspiciousRatio + cautionRatio) >= 0.70
+  ) {
+    suspicionLevel = 'Suspicious';
+    dfaState = 'q_suspicious';
+  } else if (cautionRatio >= 0.35) {
+    suspicionLevel = 'Caution';
+    dfaState = 'q_caution';
+  } else {
+    suspicionLevel = 'Human';
+    dfaState = 'q_human';
+  }
+
+  const color = LEVEL_META[suspicionLevel]?.color ?? LEVEL_META.InsufficientData.color;
+  const classification = hasInsufficientCellData
+    ? 'Insufficient interaction data to classify reliably — answer a few more questions and interact normally, then retry.'
+    : getMessageFromLevel(suspicionLevel);
+
+  // Keep a numeric score for display/debug consistency
+  const aggregatedScore = 100 * suspiciousRatio + 50 * cautionRatio;
 
   return {
     score,
-    totalQuestions: questions.length,
+    totalQuestions,
+    dfaState,
+    overallMetricsNote: 'Overall metrics (informational only; not used in final classification)',
     cv: cv.toFixed(3),
     repetition: (repetition * 100).toFixed(1),
     entropyNorm: entropyNorm.toFixed(2),
@@ -387,7 +353,7 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     classification,
     color,
     suspicionLevel,
-    dfaState,
+    aggregatedScore: aggregatedScore.toFixed(1),
     totalEvents: events.length,
     totalTime: totalTimeSec,
     avgTimePerQuestion: avgTimePerQuestion.toFixed(1),
@@ -401,13 +367,18 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     keyboardNavigation: keyboardEvents.length,
     keyboardClicks: keyboardClicks.length,
     keyboardRatio: (keyboardRatio * 100).toFixed(1),
-    keyboardOnlyFlag,
+    suspiciousCombo,
     
     cells: cellAnalysisResults,
-    cellTapeSymbols,
-    stateProgression,
     cellStats: {
-      totalCells: cells.length
+      totalCells: cells.length,
+      validCells,
+      suspiciousRatio: (suspiciousRatio * 100).toFixed(1),
+      cautionRatio: (cautionRatio * 100).toFixed(1),
+      denom: denomObserved,
+      denomObserved,
+      denomTotal,
+      counts: { s: suspicious, c: caution, h: human, n: notEnough }
     }
   };
 };

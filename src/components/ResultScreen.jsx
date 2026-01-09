@@ -8,28 +8,6 @@ import {
   groupEventsIntoBlocks
 } from '../utils/tapeSimulation';
 
-// State color configuration
-const STATE_COLORS = {
-  'q0': { bg: '#F3F4F6', border: '#D1D5DB', text: '#6B7280', label: 'Not Enough Data' },
-  'q1': { bg: '#ECFDF5', border: '#10B981', text: '#22c55e', label: 'Human' },
-  'q2': { bg: '#ECFDF5', border: '#10B981', text: '#22c55e', label: 'Human' },
-  'q3': { bg: '#FFEDD5', border: '#F97316', text: '#fb923c', label: 'Caution'  },
-  'q4': { bg: '#FFEDD5', border: '#F97316', text: '#fb923c', label: 'Caution'  },
-  'q5': { bg: '#FFEDD5', border: '#F97316', text: '#fb923c', label: 'Caution' },
-  'q6': { bg: '#FFEDD5', border: '#F97316', text: '#fb923c', label: 'Caution' },
-  'q7': { bg: '#FEE2E2', border: '#EF4444', text: '#f97316', label: 'Suspicious' },
-  'q8': { bg: '#FEE2E2', border: '#EF4444', text: '#f97316', label: 'Suspicious' },
-  'q9': { bg: '#FEE2E2', border: '#DC2626', text: '#ef4444', label: 'Suspicious' },
-  'q10': { bg: '#FEE2E2', border: '#DC2626', text: '#ef4444', label: 'Suspicious' }
-};
-
-const getLastWrittenState = (stateProgression, cellIndex) => {
-  if (cellIndex < 0) return STATE_COLORS['q0'];
-  const lastState = stateProgression?.find(sp => sp.cellIndex === cellIndex);
-  const stateLabel = lastState?.toState || 'q0';
-  return STATE_COLORS[stateLabel] || STATE_COLORS['q0'];
-};
-
 function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
   const CELL_MS = CELL_MS_DEFAULT;
 
@@ -518,13 +496,10 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
     avgTimePerQuestion: '0',
     suspicionLevel: 'Human',
     classification: 'No data available',
-    flagSum: '0',
-    flagMax: 5,
     cv: '0',
     repetition: '0',
     entropyNorm: '0',
     compression: '0',
-    celledMetrics: null,
     totalEvents: 0,
     totalTime: '0',
     clicks: 0,
@@ -636,7 +611,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Repetition</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Entropy</th>
                         <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Compressibility</th>
-                        <th style={{ padding: '0.75rem', textAlign: 'center', fontWeight: '600', color: 'black' }}>Result</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -656,17 +630,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.R)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.E)}</td>
                             <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black' }}>{getFlagEmoji(w.analysis.C)}</td>
-                            <td style={{ padding: '0.75rem', textAlign: 'center', color: 'black', fontWeight: '600' }}>
-                              {(() => {
-                                const symbolToLabel = {
-                                  's': 'Suspicious',
-                                  'c': 'Caution',
-                                  'h': 'Human',
-                                  'n': 'Not enough data'
-                                };
-                                return w.finalDetectionResult ? symbolToLabel[w.finalDetectionResult] || 'N/A' : 'N/A';
-                              })()}
-                            </td>
                           </tr>
                         );
                       })}
@@ -821,28 +784,6 @@ function ResultScreen({ analysis = {}, onQuizAgain, onGoHome, events = [] }) {
                       </div>
                     </>
                   )}
-
-                  {/* Current DFA State - Updates as tape is processed */}
-                  {safeAnalysis.stateProgression && (() => {
-                    const stateInfo = getLastWrittenState(safeAnalysis.stateProgression, writeHeadCellIndexMax);
-                    const lastState = writeHeadCellIndexMax < 0 ? null : safeAnalysis.stateProgression?.find(sp => sp.cellIndex === writeHeadCellIndexMax);
-                    const stateLabel = lastState?.toState || 'q0';
-                    return (
-                      <div style={{ 
-                        marginTop: '1.5rem', 
-                        padding: '1rem', 
-                        backgroundColor: stateInfo.bg,
-                        borderRadius: '0.5rem', 
-                        border: `1px solid ${stateInfo.border}`,
-                        textAlign: 'center' 
-                      }}>
-                        <div style={{ fontSize: '0.875rem', color: '#6B7280', marginBottom: '0.5rem' }}>Current State:</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: stateInfo.text }}>
-                          {`${stateLabel} - ${stateInfo.label}`}
-                        </div>
-                      </div>
-                    );
-                  })()}
 
                   <div style={styles.blockInfo}>
                     <strong>Tape Blocks:</strong> {blocks.length} segments detected
