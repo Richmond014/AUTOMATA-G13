@@ -1,6 +1,7 @@
-// src/utils/analysisHelpers.js
-// Analysis and calculation functions - IMPROVED & FAIR
 
+const uniqueCount = (arr) => new Set(arr).size;
+
+// Timing CV (coefficient of variation) T
 export const calculateCV = (intervals) => {
   if (intervals.length < 2) return 0;
   const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
@@ -9,13 +10,14 @@ export const calculateCV = (intervals) => {
   return mean === 0 ? 0 : stdDev / mean;
 };
 
-// FIX #4: Focus on meaningful actions, not mouse spam
+// Repetition (attern repetition) R
 export const calculateRepetition = (eventTypes) => {
-  // Filter out mouse movements - they naturally cluster
+  // Filter out mouse movements (Not included in calculation of R)
   const meaningfulEvents = eventTypes.filter(t => 
     t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
   );
-  
+
+  if (uniqueCount(meaningfulEvents) < 2) return 0; 
   if (meaningfulEvents.length < 12) return 0;
   
   const blockSize = 4;
@@ -41,11 +43,13 @@ export const calculateRepetition = (eventTypes) => {
   return matches / blocks.length;
 };
 
+// Shannon entropy
 export const calculateEntropy = (eventTypes) => {
   const freq = {};
   eventTypes.forEach(t => freq[t] = (freq[t] || 0) + 1);
   let entropy = 0;
   const total = eventTypes.length;
+  if (total === 0) return 0;
   Object.values(freq).forEach(c => {
     const p = c / total;
     if (p > 0) entropy -= p * Math.log2(p);
@@ -53,14 +57,33 @@ export const calculateEntropy = (eventTypes) => {
   return entropy;
 };
 
-// FIX #3: Focus on meaningful events, ignore mouse spam
+// Normalized entropy E
+const DEFAULT_ENTROPY_ALPHABET_SIZE = 8;
+
+export const calculateNormalizedEntropy = (
+  eventTypes,
+  alphabetSize = DEFAULT_ENTROPY_ALPHABET_SIZE
+) => {
+  const H = calculateEntropy(eventTypes);
+  const k = Math.max(1, alphabetSize);
+  if (k <= 1) return 0;
+
+  const Hmax = Math.log2(k);
+  if (Hmax === 0) return 0;
+
+  const Hnorm = H / Hmax;
+  return Math.max(0, Math.min(1, Hnorm));
+};
+
+// Compression ratio proxy (lower can indicate repetitive/simple patterns)
 export const calculateCompression = (eventTypes) => {
-  // Only analyze clicks, hovers, scrolls - ignore mouse movements
+  // Only analyze clicks, hovers, scrolls
   const meaningfulEvents = eventTypes.filter(t => 
     t === 'C' || t === 'H' || t === 'S'
   );
   
-  if (meaningfulEvents.length < 4) return 1.0; // Not enough data, assume normal
+  if (meaningfulEvents.length < 4) return 1.0;
+  if (uniqueCount(meaningfulEvents) < 2) return 1.0;
   
   const original = meaningfulEvents.join('');
   const compressed = original.split('').reduce((acc, char, i, arr) => {
@@ -71,51 +94,49 @@ export const calculateCompression = (eventTypes) => {
   return compressed.length / original.length;
 };
 
-// NEW: Partition events into 5-second windows
-export const partitionIntoWindows = (events, windowSizeMs = 5000) => {
+// Partition events into fixed-duration cells (5s by default) 
+// This is used for writing the output tape and per-cell analysis
+export const partitionIntoCells = (events, cellSizeMs = 5000) => {
   if (events.length === 0) return [];
   
-  const windows = [];
+  const cells = [];
   const startTime = events[0].timestamp;
-  let currentWindow = [];
-  let currentWindowStart = startTime;
+  let currentCell = [];
+  let currentCellStart = startTime;
   
   events.forEach(event => {
-    const timeInCurrentWindow = event.timestamp - currentWindowStart;
+    const timeInCurrentCell = event.timestamp - currentCellStart;
     
-    if (timeInCurrentWindow >= windowSizeMs) {
-      // Save current window and start new one
-      if (currentWindow.length > 0) {
-        windows.push({
-          startTime: currentWindowStart,
-          endTime: currentWindowStart + windowSizeMs,
-          events: currentWindow
+    if (timeInCurrentCell >= cellSizeMs) {
+      if (currentCell.length > 0) {
+        cells.push({
+          startTime: currentCellStart,
+          endTime: currentCellStart + cellSizeMs,
+          events: currentCell
         });
       }
-      currentWindow = [event];
-      currentWindowStart = Math.floor(event.timestamp / windowSizeMs) * windowSizeMs;
+      currentCell = [event];
+      currentCellStart = Math.floor(event.timestamp / cellSizeMs) * cellSizeMs;
     } else {
-      currentWindow.push(event);
+      currentCell.push(event);
     }
   });
-  
-  // Add last window
-  if (currentWindow.length > 0) {
-    windows.push({
-      startTime: currentWindowStart,
-      endTime: currentWindowStart + windowSizeMs,
-      events: currentWindow
+
+  if (currentCell.length > 0) {
+    cells.push({
+      startTime: currentCellStart,
+      endTime: currentCellStart + cellSizeMs,
+      events: currentCell
     });
   }
   
-  return windows;
+  return cells;
 };
 
-// Analyze single window and return flags
-export const analyzeWindow = (windowEvents) => {
-  const clickEvents = windowEvents.filter(e => e.type === "C");
-  
-  // Need at least 2 clicks for timing analysis
+// Analyze single cell and return flags
+export const analyzeCell = (cellEvents) => {
+  const clickEvents = cellEvents.filter(e => e.type === "C");
+
   if (clickEvents.length < 2) {
     return {
       hasEnoughData: false,
@@ -126,31 +147,64 @@ export const analyzeWindow = (windowEvents) => {
     };
   }
   
-  // Calculate intervals for this window
-  const intervals = [];
-  for (let i = 1; i < clickEvents.length; i++) {
-    intervals.push(clickEvents[i].timestamp - clickEvents[i - 1].timestamp);
-  }
-  
-  const eventTypes = windowEvents.map(e => e.type);
-  const cv = calculateCV(intervals);
+  const eventTypes = cellEvents.map(e => e.type);
+
+  const entropyTypes = eventTypes.filter(t => t !== 'M');
+
+  // Metric-specific weights (used for weighted cell averages)
+  const repetitionTypes = eventTypes.filter(t =>
+    t === 'C' || t === 'H' || t === 'S' || t === 'T' || t === 'R'
+  );
+  const compressionTypes = eventTypes.filter(t =>
+    t === 'C' || t === 'H' || t === 'S'
+  );
+
+  const cvWeight = clickEvents.length >= 3 ? Math.max(0, clickEvents.length - 1) : 0; // #intervals
+  const repetitionWeight = repetitionTypes.length;
+  const entropyWeight = entropyTypes.length;
+  const compressionWeight = compressionTypes.length;
+
   const repetition = calculateRepetition(eventTypes);
-  const entropy = calculateEntropy(eventTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
   const compression = calculateCompression(eventTypes);
+
+  let cv = null;
+  let Tflag = 'n';
+  if (clickEvents.length >= 3) {
+    const intervals = [];
+    for (let i = 1; i < clickEvents.length; i++) {
+      intervals.push(clickEvents[i].timestamp - clickEvents[i - 1].timestamp);
+    }
+    cv = calculateCV(intervals);
+    Tflag = cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h');
+  }
+
+  const hasEntropyDiversity = uniqueCount(entropyTypes) >= 2;
   
-  // Return symbolic flags: s=suspicious, c=caution, h=human, n=not enough data
+  // Return symbolic flags: s = suspicious, c = caution, h = human, n = not enough data
   return {
     hasEnoughData: true,
-    T: cv < 0.08 ? 's' : (cv < 0.20 ? 'c' : 'h'),
+    T: Tflag,
     R: repetition >= 0.75 ? 's' : (repetition >= 0.60 ? 'c' : 'h'),
-    E: entropy < 1.2 ? 's' : (entropy < 1.8 ? 'c' : 'h'),
+    E: !hasEntropyDiversity ? 'n' : (entropyNorm < 0.40 ? 's' : (entropyNorm < 0.60 ? 'c' : 'h')),
     C: compression <= 0.50 ? 's' : (compression <= 0.75 ? 'c' : 'h'),
-    values: { cv, repetition, entropy, compression }
+    values: {
+      cv,
+      repetition,
+      entropyNorm,
+      compression,
+      weights: {
+        cv: cvWeight,
+        repetition: repetitionWeight,
+        entropyNorm: entropyWeight,
+        compression: compressionWeight
+      }
+    }
   };
 };
 
+
 export const analyzeQuizBehavior = (score, events, questions, startTimeValue) => {
-  // FIX #2: Check for minimum CLICK events, not just total events
   const clickEvents = events.filter(e => e.type === "C");
   
   if (clickEvents.length < 3) {
@@ -164,38 +218,40 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     };
   }
 
-  //  Partition into 5-second windows and analyze each
-  const windows = partitionIntoWindows(events, 5000);
-  const windowAnalyses = windows.map((window, idx) => ({
-    window: {
-      start: (idx * 5).toFixed(1),  
-      end: ((idx + 1) * 5).toFixed(1)  
-    },
-    eventCount: window.events.length,
-    analysis: analyzeWindow(window.events)
-  }));
+  // Partition into 5-second cells and analyze each
+  const cells = partitionIntoCells(events, 5000);
+  const cellAnalysisResults = cells.map((cell, idx) => {
+    const cellMeta = {
+      start: (idx * 5).toFixed(1),
+      end: ((idx + 1) * 5).toFixed(1)
+    };
+
+    return {
+      cell: cellMeta,
+      eventCount: cell.events.length,
+      analysis: analyzeCell(cell.events)
+    };
+  });
   
-  // Count total flags across all windows (DFA state accumulation)
-  // Only count windows with enough data
+  // Count total flags across all cells (DFA state accumulation)
+  // Only count cells with enough data
   let totalSuspicious = 0;
   let totalCaution = 0;
-  let totalHuman = 0;
-  let validWindows = 0;
+  let validCells = 0;
   
-  windowAnalyses.forEach(wa => {
+  cellAnalysisResults.forEach(wa => {
     if (wa.analysis.hasEnoughData) {
-      validWindows++;
+      validCells++;
       ['T', 'R', 'E', 'C'].forEach(metric => {
         if (wa.analysis[metric] === 's') totalSuspicious++;
         else if (wa.analysis[metric] === 'c') totalCaution++;
-        else if (wa.analysis[metric] === 'h') totalHuman++;
         // 'n' (not enough data) is ignored
       });
     }
   });
 
-  // If less than 2 valid windows, use overall metrics instead
-  const useWindowedAnalysis = validWindows >= 2;
+  // If less than 2 valid cells, use overall metrics instead
+  const useCellAnalysis = validCells >= 2;
 
   // Calculate overall metrics (for backward compatibility)
   const intervals = [];
@@ -204,37 +260,84 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   }
 
   const eventTypes = events.map(e => e.type);
+  const entropyTypes = eventTypes.filter(t => t !== 'M');
   const cv = calculateCV(intervals);
   const repetition = calculateRepetition(eventTypes);
-  const entropy = calculateEntropy(eventTypes);
+  const entropyNorm = calculateNormalizedEntropy(entropyTypes, uniqueCount(entropyTypes));
   const compression = calculateCompression(eventTypes);
 
-  // Check for keyboard-only usage (suspicious for a quiz)
-  const keyboardEvents = events.filter(e => e.type === 'TAB_NAV' || e.type === 'KEY_SELECT');
-  const keyboardClicks = clickEvents.filter(e => e.metadata && e.metadata.method === 'keyboard');
+  // Cell-aggregated metrics
+  const validCellAnalysisResults = cellAnalysisResults.filter(wa => wa.analysis?.hasEnoughData);
+  const weightedAvg = (items) => {
+    let sum = 0;
+    let weightSum = 0;
+    items.forEach(({ value, weight }) => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return;
+      if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) return;
+      sum += value * weight;
+      weightSum += weight;
+    });
+    return weightSum > 0 ? sum / weightSum : null;
+  };
+
+  const cellCvAvg = weightedAvg(validCellAnalysisResults.map(wa => ({
+    value: wa.analysis?.values?.cv,
+    weight: wa.analysis?.values?.weights?.cv
+  })));
+
+  const cellRepetitionAvg = weightedAvg(validCellAnalysisResults.map(wa => ({
+    value: wa.analysis?.values?.repetition,
+    weight: wa.analysis?.values?.weights?.repetition
+  })));
+
+  const cellEntropyNormAvg = weightedAvg(validCellAnalysisResults.map(wa => ({
+    value: wa.analysis?.values?.entropyNorm,
+    weight: wa.analysis?.values?.weights?.entropyNorm
+  })));
+
+  const cellCompressionAvg = weightedAvg(validCellAnalysisResults.map(wa => ({
+    value: wa.analysis?.values?.compression,
+    weight: wa.analysis?.values?.weights?.compression
+  })));
+
+  const celledMetrics = {
+    cv: ((cellCvAvg ?? cv)).toFixed(3),
+    repetition: (((cellRepetitionAvg ?? repetition) * 100)).toFixed(1),
+    entropyNorm: ((cellEntropyNormAvg ?? entropyNorm)).toFixed(2),
+    compression: ((cellCompressionAvg ?? compression)).toFixed(2),
+    cellsUsed: {
+      cv: validCellAnalysisResults.filter(wa => typeof wa.analysis?.values?.cv === 'number' && Number.isFinite(wa.analysis.values.cv)).length,
+      all: validCellAnalysisResults.length
+    }
+  };
+
+  // Keyboard-only usage 
+  const keyboardEvents = events.filter(e => e.type === 'K');
+  const keyboardClicks = clickEvents.filter(e => e.method === 'keyboard');
   const totalClicks = clickEvents.length;
   const keyboardRatio = totalClicks > 0 ? keyboardClicks.length / totalClicks : 0;
   
-  // Red flag: Using ONLY keyboard (bots often use keyboard automation)
-  const keyboardOnlyFlag = keyboardRatio >= 0.80 ? 1 : (keyboardRatio >= 0.50 ? 0.5 : 0);
+  // Heavy keyboard-only clicking
+  const keyboardOnlyFlag = totalClicks >= 5
+    ? (keyboardRatio >= 0.90 ? 1 : (keyboardRatio >= 0.70 ? 0.5 : 0))
+    : 0;
 
-  // Overall flags (including keyboard usage)
+  // Overall flags 
   const timingFlag = cv < 0.08 ? 1 : (cv < 0.20 ? 0.5 : 0);
   const repetitionFlag = repetition >= 0.75 ? 1 : (repetition >= 0.60 ? 0.5 : 0);
-  const entropyFlag = entropy < 1.2 ? 1 : (entropy < 1.8 ? 0.5 : 0);
+  const entropyFlag = uniqueCount(entropyTypes) < 2 ? 0 : (entropyNorm < 0.40 ? 1 : (entropyNorm < 0.60 ? 0.5 : 0));
   const compressionFlag = compression <= 0.50 ? 1 : (compression <= 0.75 ? 0.5 : 0);
   const flagSum = timingFlag + repetitionFlag + entropyFlag + compressionFlag + keyboardOnlyFlag;
 
-  // DFA State Machine: Determine final state based on window analyses
-  // Use windowed analysis if we have enough windows, otherwise fall back to overall metrics
+  // DFA-style classification based on per-cell analysis
+  // Use cell analysis if we have enough cells, otherwise fall back to overall metrics
   let suspiciousRatio, cautionRatio;
   
-  if (useWindowedAnalysis && validWindows > 0) {
-    suspiciousRatio = totalSuspicious / (validWindows * 4);
-    cautionRatio = totalCaution / (validWindows * 4);
+  if (useCellAnalysis && validCells > 0) {
+    suspiciousRatio = totalSuspicious / (validCells * 4); // 4 metrics per cell (T, R, E, C)
+    cautionRatio = totalCaution / (validCells * 4);
   } else {
-    // Fallback: convert overall flags to ratios
-    suspiciousRatio = flagSum / 4;
+    suspiciousRatio = flagSum / 5;
     cautionRatio = 0;
   }
   
@@ -243,40 +346,69 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
   const totalTimeSec = (totalTimeMs / 1000).toFixed(0);
   const avgTimePerQuestion = totalTimeMs / questions.length / 1000;
   
-  const tooFast = avgTimePerQuestion < 2;
+  const tooFast = avgTimePerQuestion < 1.0;
   const perfectScore = score === questions.length;
   const suspiciousCombo = tooFast && perfectScore;
 
-  // DFA Classification (enhanced with windowed analysis)
+  const buildEvidenceReasons = () => {
+    const reasons = [];
+
+    if (suspiciousCombo) reasons.push('very fast answers with a perfect score');
+
+    if (timingFlag >= 1) reasons.push('highly consistent click timing');
+    else if (timingFlag >= 0.5) reasons.push('unusually consistent click timing');
+
+    if (repetitionFlag >= 1) reasons.push('high repetition in action patterns');
+    else if (repetitionFlag >= 0.5) reasons.push('some repetition in action patterns');
+
+    if (entropyFlag >= 1) reasons.push('low interaction variety');
+    else if (entropyFlag >= 0.5) reasons.push('reduced interaction variety');
+
+    if (compressionFlag >= 1) reasons.push('very simple repeated sequences');
+    else if (compressionFlag >= 0.5) reasons.push('simple sequences');
+
+    if (keyboardOnlyFlag >= 1) reasons.push('clicks mostly triggered via keyboard');
+    else if (keyboardOnlyFlag >= 0.5) reasons.push('heavy keyboard-based clicking');
+
+    return reasons;
+  };
+
+  const buildDetailsSentence = (leadIn, fallback) => {
+    const reasons = buildEvidenceReasons();
+    return reasons.length ? `${leadIn} ${reasons.join(', ')}.` : fallback;
+  };
+
+  // DFA classification: q_human / q_caution / q_suspicious
   let classification, color, suspicionLevel, dfaState;
   
-  // More lenient thresholds for realistic human behavior
-  // q_bot: High suspicion across multiple windows (raised from 0.50 to 0.60)
-  if (suspiciousRatio >= 0.60 || flagSum >= 3 || suspiciousCombo) {
-    classification = "HIGH SUSPICION - Likely Automated";
+  //q_suspicious
+  if (
+    // suspiciousRatio >= 0.65 ||
+    // flagSum >= 3.5 ||
+    suspiciousCombo ||
+    suspiciousRatio >= 0.45 ||
+    (suspiciousRatio + cautionRatio) >= 0.70 ||
+    flagSum >= 2.5 ||
+    suspiciousCombo
+  ) {
+    classification = buildDetailsSentence('Detected:', 'Multiple indicators were elevated.');
     color = "#ef4444";
-    suspicionLevel = "HIGH";
-    dfaState = "q_bot";
-  } 
-  // q_suspicious: Moderate flags (raised from 0.25 to 0.40)
-  else if (suspiciousRatio >= 0.40 || (suspiciousRatio + cautionRatio) >= 0.65 || flagSum >= 2.5) {
-    classification = "MODERATE SUSPICION - Review Needed";
-    color = "#fb923c";
-    suspicionLevel = "MODERATE";
+    suspicionLevel = "Suspicious";
     dfaState = "q_suspicious";
   }
-  // q_caution: Some irregularities (raised from 0.25 to 0.35)
+
+  // q_caution
   else if (cautionRatio >= 0.35 || flagSum >= 1.5) {
-    classification = "LOW SUSPICION - Minor Irregularities";
+    classification = buildDetailsSentence('Some signals flagged:', 'Minor irregularities detected.');
     color = "#fbbf24";
-    suspicionLevel = "LOW";
+    suspicionLevel = "Caution";
     dfaState = "q_caution";
   }
   // q_human: Normal behavior
   else {
-    classification = "NO SUSPICION - Normal Human Behavior";
+    classification = "No strong automation signals detected. Interaction patterns fall within a normal range for this quiz.";
     color = "#22c55e";
-    suspicionLevel = "NONE";
+    suspicionLevel = "Human";
     dfaState = "q_human";
   }
 
@@ -285,9 +417,11 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     totalQuestions: questions.length,
     cv: cv.toFixed(3),
     repetition: (repetition * 100).toFixed(1),
-    entropy: entropy.toFixed(2),
+    entropyNorm: entropyNorm.toFixed(2),
     compression: compression.toFixed(2),
+    celledMetrics,
     flagSum: flagSum.toFixed(1),
+    flagMax: 5,
     classification,
     color,
     suspicionLevel,
@@ -310,14 +444,15 @@ export const analyzeQuizBehavior = (score, events, questions, startTimeValue) =>
     entropyFlag,
     compressionFlag,
     keyboardOnlyFlag,
-    // NEW: Windowed analysis data
-    windows: windowAnalyses,
-    windowStats: {
-      totalWindows: windows.length,
-      validWindows,
+    
+    cells: cellAnalysisResults,
+    cellStats: {
+      totalCells: cells.length,
+      validCells,
       suspiciousRatio: (suspiciousRatio * 100).toFixed(1),
       cautionRatio: (cautionRatio * 100).toFixed(1),
       humanRatio: ((1 - suspiciousRatio - cautionRatio) * 100).toFixed(1)
     }
   };
 };
+

@@ -7,7 +7,7 @@ import { BehaviorInfo } from '../components/BehaviorInfo';
 import { QuestionCard } from '../components/QuestionCard';
 import { QuizButtons } from '../components/QuizButtons';
 import { useBehaviorTracking } from '../hooks/useBehaviorTracking';
-import { analyzeQuizBehavior } from '../utils/AnalysisHelpers';
+import { analyzeQuizBehavior } from '../utils/analysisHelpers';
 import { questions } from '../utils/quizData';
 
 function QuizBotDetector({ onComplete, startTime: propStartTime }) {
@@ -15,27 +15,18 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
   const [warnings, setWarnings] = useState({});
   const startTime = useRef(propStartTime || Date.now());
   
-  // Add recordHover here! ⬇️
-  const { events, quizAreaRef, recordEvent, recordHover } = useBehaviorTracking();
+  const { events, quizAreaRef, recordEvent, recordHover, recordKeyboard } = useBehaviorTracking();
 
   const handleAnswerChange = (question, value) => {
-    // Get mouse position for click tracking
-    const mouseEvent = window.event;
-    const metadata = { action: 'answer_selected', question, value };
+    // REMOVE THIS - Global click listener already handles it!
+    // Don't record here, the global click listener will catch it
     
-    if (mouseEvent && quizAreaRef.current) {
-      const rect = quizAreaRef.current.getBoundingClientRect();
-      metadata.x = mouseEvent.clientX - rect.left;
-      metadata.y = mouseEvent.clientY - rect.top;
-    }
-    
-    recordEvent('C', metadata);
     setAnswers(prev => ({ ...prev, [question]: value }));
     setWarnings(prev => ({ ...prev, [question]: false }));
   };
 
   const handleClear = () => {
-    // FIX #5: Record clear action
+    // Only record the CLEAR action, not the click itself
     recordEvent('CLEAR', { 
       previousAnswerCount: Object.keys(answers).length 
     });
@@ -61,13 +52,19 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
       return;
     }
 
+    // Only record SUBMIT action, not the click itself
+    recordEvent('SUBMIT', {
+      answeredQuestions: Object.keys(answers).length,
+      totalQuestions: questions.length
+    });
+
     let score = 0;
     questions.forEach((q) => {
       if (answers[q.id] === q.correct) score++;
     });
 
     const analysis = analyzeQuizBehavior(score, events, questions, startTime.current);
-    if (onComplete) onComplete(analysis, events); // Pass both analysis and events
+    if (onComplete) onComplete(analysis, events);
   };
 
   return (
@@ -87,6 +84,7 @@ function QuizBotDetector({ onComplete, startTime: propStartTime }) {
             warning={warnings[q.id]}
             onAnswerChange={handleAnswerChange}
             onHover={recordHover}
+            onKeyboard={recordKeyboard}
           />
         ))}
 
