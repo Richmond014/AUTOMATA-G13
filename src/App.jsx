@@ -7,7 +7,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState('landing'); // 'landing', 'quiz', 'results'
   const [quizResults, setQuizResults] = useState(null);
   const [quizStartTime, setQuizStartTime] = useState(null);
-  const [savedEvents, setSavedEvents] = useState([]); // ← Add this to save events
+  const [savedEvents, setSavedEvents] = useState([]); // ← Used to save events
 
   const handleStartQuiz = () => {
     setCurrentPage('quiz');
@@ -28,11 +28,19 @@ function App() {
   };
 
   const handleGoHome = () => {
-    setQuizResults(null);
-    setSavedEvents([]); // ← Clear events
-    setQuizStartTime(null);
-    setCurrentPage('landing');
-  };
+  setQuizResults(null);
+  setSavedEvents([]);
+  setQuizStartTime(null);
+  setCurrentPage('landing');
+
+  if (window.location.hash) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
+  setTimeout(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, 0);
+};
 
   return (
     <div className="App">

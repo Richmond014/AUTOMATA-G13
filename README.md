@@ -1,16 +1,65 @@
-# React + Vite
+# AUTOMATA-G13 (Quiz Behavior Detector)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project is a quiz app that records interaction events during a session and produces a behavior-based classification: **Human**, **Caution**, or **Suspicious**.
 
-Currently, two official plugins are available:
+Behavior evidence is computed primarily from **cell/window-level metrics** (computed per 5-second cell).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The UI also includes a Turing Machine–inspired visualization showing:
+- An input tape (raw events)
+- An output tape (per-cell metric tokens)
 
-## React Compiler
+See the conceptual write-up: [docs/behavior-tape-analysis.md](docs/behavior-tape-analysis.md).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Formal DFA-like Model (Aggregated Evidence)
 
-## Expanding the ESLint configuration
+The implementation is **automata-inspired**: it uses a finite set of states and a deterministic mapping from observed symbols/evidence to a final state. It does **not** implement a classic step-by-step DFA transition function $\delta(q, a)$ over a single symbol stream.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### States
+
+Let the state set be:
+$$Q = \{q_{human},\ q_{caution},\ q_{suspicious}\}$$
+
+### Per-cell symbols
+
+Events are partitioned into 5-second cells. For each cell, the analyzer computes 4 metric flags:
+$$\{T, R, E, C\} \in \{h, c, s, n\}$$
+
+Where:
+- $h$ = human-like
+- $c$ = caution
+- $s$ = suspicious
+- $n$ = not enough data
+
+The output tape token is rendered as:
+
+`T_s R_h E_c C_n`
+
+### Evidence aggregation
+
+Across all **valid cells**, the implementation counts how many per-cell metric flags are suspicious or caution.
+
+Let:
+- `validCells` = number of cells that contribute at least one observed metric (`h/c/s`)
+- `denomTotal = validCells \times 4` (coverage-aware denominator)
+
+Coverage-aware ratios:
+$$suspiciousRatioTotal = \frac{\#(s)}{validCells \times 4}$$
+$$cautionRatioTotal = \frac{\#(c)}{validCells \times 4}$$
+
+Weighted score (suspicious weighs more than caution):
+$$weightedScoreTotal = \frac{2\#(s) + 1\#(c)}{2\cdot(validCells \times 4)}$$
+
+### Deterministic final-state selection
+
+The final DFA state is selected deterministically from the aggregated evidence:
+- Strong evidence of automation-like behavior maps to $q_{suspicious}$
+- Moderate evidence maps to $q_{caution}$
+- Otherwise maps to $q_{human}$
+
+Thresholds (current implementation):
+- InsufficientData if `validCells < 2` (or no observed metrics)
+- Suspicious if `weightedScoreTotal >= 0.32`
+- Caution if `weightedScoreTotal >= 0.24`
+
+This choice is implemented in [src/utils/analysisHelpers.js](src/utils/analysisHelpers.js).
+
